@@ -7,7 +7,7 @@
   <a href="https://www.npmjs.com/package/cypress-backend-tool">
     <img src="https://img.shields.io/npm/dm/cypress-backend-tool" alt="npm downloads">
   </a>
-  <a href="https://github.com/Gabox301/cypress-backend-tool/blob/main/LICENSE">
+  <a href="https://github.com/Gabox301/cypress-backend-tool/blob/master/LICENSE">
     <img src="https://img.shields.io/npm/l/cypress-backend-tool" alt="license">
   </a>
 </p>
