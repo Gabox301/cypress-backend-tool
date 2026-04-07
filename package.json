@@ -1,0 +1,41 @@
+{
+  "name": "cypress-backend-tool",
+  "version": "1.0.0",
+  "author": "Gabriel Ortega <https://github.com/Gabox301>",
+  "description": "Cypress plugin for API testing and PostgreSQL queries with UI interface",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "files": [
+    "dist",
+    "dist/ui"
+  ],
+  "scripts": {
+    "build": "npm run build:ui && npm run build:plugin",
+    "build:ui": "vite build --config vite.lib.config.ts",
+    "build:plugin": "tsc -p cypress/support/plugin/tsconfig.json",
+    "check": "tsc --noEmit -p cypress/support/plugin/tsconfig.json",
+    "test": "cypress run",
+    "cy": "cypress open"
+  },
+  "dependencies": {
+    "pg": "^8.20.0",
+    "prismjs": "^1.30.0",
+    "set-cookie-parser": "^3.1.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "@types/node": "^25.5.2",
+    "@types/pg": "^8.20.0",
+    "cypress": "^15.13.0",
+    "svelte": "^5.55.1",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.6"
+  },
+  "peerDependencies": {
+    "cypress": ">=15.10.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

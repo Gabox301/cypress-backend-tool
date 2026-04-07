@@ -1,0 +1,19 @@
+# Excludes
+.env
+.env.*
+!.env.example
+cypress
+node_modules
+src
+.vscode
+.gitignore
+.npmrc
+*.ts
+*.svelte
+tsconfig.json
+svelte.config.js
+vite.lib.config.ts
+cypress.config.ts
+cypress.config.js
+README.md
+!dist

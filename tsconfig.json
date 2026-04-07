@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "ignoreDeprecations": "6.0",
+    "paths": {
+      "$lib": ["./src/lib"],
+      "$lib/*": ["./src/lib/*"]
+    },
+    "types": ["cypress", "node"]
+  },
+  "include": ["cypress/**/*.ts", "src/**/*.ts", "src/**/*.svelte"],
+  "exclude": ["node_modules/.svelte2tsx-language-server-files/**"]
+}
