@@ -40,8 +40,10 @@ yarn add cypress-backend-tool
 
 ```typescript
 // cypress/support/e2e.ts
-import 'cypress-backend-tool';
+import 'cypress-backend-tool'; // Auto-init: registra cy.http() y cy.query()
 ```
+
+Nada más. Sin `init()`, sin configuración adicional.
 
 ### 2. Configurar cypress.config.ts
 
@@ -53,13 +55,44 @@ export default defineConfig({
     setupNodeEvents(on, config) {
       return config;
     },
+    // Configuración del plugin vía Cypress.expose()
+    expose: {
+      snapshotOnly: false, // Colapsa la UI tras cada comando
+      hideCredentials: true, // Oculta contraseñas/tokens en la UI
+      hideCredentialsOptions: {
+        // Qué secciones sanitizar
+        headers: true,
+        auth: true,
+        body: true,
+        query: true,
+      },
+      requestMode: 'auto', // 'auto' o 'manual'
+      CYPRESS_PLUGIN_DEBUG: false, // Logs de diagnóstico
+    },
   },
 });
 ```
 
-### 3. Variables de entorno (opcional)
+### 3. Credenciales de base de datos
 
-Crea un archivo `.env` en la raíz de tu proyecto:
+Usa `cy.env()` (moderno, seguro) en vez de `Cypress.env()` (deprecado):
+
+```typescript
+// cypress.config.ts
+export default defineConfig({
+  e2e: {
+    env: {
+      dbHost: 'localhost',
+      dbPort: '5432',
+      dbName: 'tu_base_de_datos',
+      dbUser: 'tu_usuario',
+      dbPassword: 'tu_password',
+    },
+  },
+});
+```
+
+O desde un archivo `.env`:
 
 ```env
 CYPRESS_DB_HOST=localhost
@@ -122,30 +155,28 @@ cy.query('SELECT * FROM users WHERE id = $1', {
 
 ## Configuración avanzada
 
-### Cypress.expose()
-
-Opciones configurables en `cypress.config.ts`:
+### Cypress.expose() — Opciones
 
 ```typescript
+// cypress.config.ts
 export default defineConfig({
   e2e: {
     expose: {
-      // Oculta la UI después de ejecutar el comando
+      // Colapsa la UI tras ejecutar (útil para screenshots limpios)
       snapshotOnly: false,
-
-      // Oculta credenciales en la UI
+      // Activa sanitización de credenciales en la UI
       hideCredentials: false,
-
-      // Activa logs de diagnóstico en consola
-      CYPRESS_PLUGIN_DEBUG: false,
-
-      // Personaliza qué credenciales ocultar
+      // Control granular por sección (booleans, no arrays)
       hideCredentialsOptions: {
-        headers: ['authorization', 'x-api-key', 'cookie'],
-        auth: ['password', 'pass'],
-        body: ['password', 'secret', 'token', 'api_key', 'apikey'],
-        query: ['password', 'secret', 'token'],
+        headers: true, // Oculta Authorization, X-API-Key, etc.
+        auth: true, // Oculta passwords en Auth tab
+        body: true, // Oculta password, token, secret en body
+        query: true, // Oculta params sensibles en query string
       },
+      // Modo de visualización: 'auto' (muestra UI en cada request) o 'manual'
+      requestMode: 'auto',
+      // Logs de diagnóstico en consola
+      CYPRESS_PLUGIN_DEBUG: false,
     },
   },
 });
@@ -153,12 +184,28 @@ export default defineConfig({
 
 ### Tabla de opciones
 
-| Opción                   | Tipo    | Default      | Descripción                      |
-| ------------------------ | ------- | ------------ | -------------------------------- |
-| `snapshotOnly`           | boolean | `false`      | Oculta la UI después de ejecutar |
-| `hideCredentials`        | boolean | `false`      | Oculta credenciales en la UI     |
-| `CYPRESS_PLUGIN_DEBUG`   | boolean | `false`      | Activa logs de diagnóstico       |
-| `hideCredentialsOptions` | object  | (ver arriba) | Configuración de sanitización    |
+| Opción                   | Tipo                                 | Default      | Descripción                         |
+| ------------------------ | ------------------------------------ | ------------ | ----------------------------------- |
+| `snapshotOnly`           | `boolean`                            | `false`      | Colapsa la UI tras cada comando     |
+| `hideCredentials`        | `boolean`                            | `false`      | Activa sanitización de credenciales |
+| `hideCredentialsOptions` | `{headers,auth,body,query: boolean}` | Todas `true` | Control granular por sección        |
+| `requestMode`            | `'auto' \| 'manual'`                 | `'auto'`     | Muestra UI automáticamente o no     |
+| `CYPRESS_PLUGIN_DEBUG`   | `boolean`                            | `false`      | Logs de diagnóstico                 |
+
+### Runtime overrides
+
+Podés cambiar la config en plena ejecución con `Cypress.expose()`:
+
+```typescript
+beforeEach(() => {
+  Cypress.expose({ snapshotOnly: true }); // Colapsar UI en todos los tests
+});
+
+it('test específico', () => {
+  Cypress.expose({ hideCredentials: false }); // Mostrar credenciales solo aquí
+  cy.http({ url: '...', method: 'GET' });
+});
+```
 
 ## Desarrollo
 
@@ -169,11 +216,14 @@ npm install
 # Build del paquete
 npm run build
 
-# Ejecutar tests
-npm run test
+# Todos los tests
+npm test
 
-# Abrir Cypress en modo interactivo
-npm run cy
+# Linter
+npm run lint
+
+# Type check
+npm run check
 ```
 
 ## API de respuesta
@@ -212,6 +262,20 @@ interface DbQueryResponse {
 ```
 
 ## Changelog
+
+### 1.0.2
+
+- **Configuración simplificada**: `hideCredentialsOptions` ahora usa booleanos por sección (`headers: true`) en vez de arrays de strings
+- **Auto-init**: `import 'cypress-backend-tool'` registra comandos automáticamente, sin `init()`
+- **Single build**: Un solo archivo `dist/index.js`, sin subcarpetas
+- **ESLint**: Agregado linter con reglas para TypeScript + Svelte 5
+- **Tests unitarios**: 98 tests con vitest + @testing-library/svelte (97% coverage)
+- **Sanitización**: Credenciales de BD ahora usan `cy.task()` exclusivamente, nunca `Cypress.expose()`
+- **`snapshotOnly`**: Colapsa la UI con clase CSS en vez de desmontar componentes
+
+### 1.0.1
+
+- Modernización de Svelte
 
 ### 1.0.0
 
