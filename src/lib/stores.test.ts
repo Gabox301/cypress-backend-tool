@@ -4,6 +4,8 @@ import {
   addDbConnection,
   addDbQuery,
   apiCalls,
+  clearApiCalls,
+  clearDbQueries,
   dbConnectionsGlobal,
   dbQueries,
   removeDbConnection,
@@ -215,5 +217,58 @@ describe('state isolation', () => {
     // This test pair proves that the beforeEach in the next test
     // successfully reset the state from the previous test
     expect(apiCalls).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 1: Store clear helpers
+// ---------------------------------------------------------------------------
+
+describe('clearApiCalls', () => {
+  beforeEach(() => resetStores());
+
+  it('empties apiCalls after one add', () => {
+    addApiCall(makeApiCall({ id: 'to-clear' }));
+    expect(apiCalls).toHaveLength(1);
+    clearApiCalls();
+    expect(apiCalls).toHaveLength(0);
+  });
+
+  it('is idempotent on already-empty array', () => {
+    expect(apiCalls).toHaveLength(0);
+    clearApiCalls();
+    expect(apiCalls).toHaveLength(0);
+    // Call a second time — still empty, no errors
+    clearApiCalls();
+    expect(apiCalls).toHaveLength(0);
+  });
+});
+
+describe('clearDbQueries', () => {
+  beforeEach(() => resetStores());
+
+  it('empties dbQueries after one add', () => {
+    addDbQuery(makeDbQuery({ id: 'to-clear-db' }));
+    expect(dbQueries).toHaveLength(1);
+    clearDbQueries();
+    expect(dbQueries).toHaveLength(0);
+  });
+});
+
+describe('clear both — independent arrays', () => {
+  beforeEach(() => resetStores());
+
+  it('both clears run in sequence, arrays stay independent', () => {
+    addApiCall(makeApiCall({ id: 'api-1' }));
+    addDbQuery(makeDbQuery({ id: 'db-1' }));
+
+    clearApiCalls();
+    expect(apiCalls).toHaveLength(0);
+    // dbQueries untouched by clearApiCalls
+    expect(dbQueries).toHaveLength(1);
+    expect(dbQueries[0].id).toBe('db-1');
+
+    clearDbQueries();
+    expect(dbQueries).toHaveLength(0);
   });
 });

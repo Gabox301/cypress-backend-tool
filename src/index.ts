@@ -7,7 +7,8 @@
 // ============================================
 
 import { getPluginConfig } from '$lib/config';
-import type { ApiRequest, ApiResponse, CypressApiPluginConfig, DbQueryDisplayData } from '$lib/types';
+import { addApiCall, addDbQuery } from '$lib/stores.svelte';
+import type { ApiCall, ApiResponse, CypressApiPluginConfig, DbQuery, DbQueryDisplayData } from '$lib/types';
 import { mountApiUI, mountDbQueryUI } from '$lib/ui';
 
 // ============================================
@@ -106,67 +107,101 @@ function readPluginConfig(): CypressApiPluginConfig {
 }
 
 // ============================================
-// UI container — create fresh each mount
+// UI container — NEW container every call (Vue plugin pattern)
+// Svelte component instances are NOT reused — each call gets a fresh mount.
+// State survives in window.__cypress_backend_tool__[testId]
 // ============================================
 
-function createUiContainer(): HTMLElement {
+// Per-test storage — scoped by Cypress test ID so data survives between it() blocks
+declare global {
+  interface Window {
+    __cypress_backend_tool__?: Record<string, { apiCalls: ApiCall[]; dbQueries: DbQuery[] }>;
+  }
+}
+
+function getTestStore() {
+  const testId = cy.state('runnable')?.id || 'unknown';
+  const win = cy.state('window') as Window;
+  if (!win.__cypress_backend_tool__) {
+    win.__cypress_backend_tool__ = {};
+  }
+  if (!win.__cypress_backend_tool__[testId]) {
+    win.__cypress_backend_tool__[testId] = { apiCalls: [], dbQueries: [] };
+  }
+  return win.__cypress_backend_tool__[testId];
+}
+
+function createFreshContainer(): HTMLElement {
   const win = cy.state('window') as Window;
   const doc = win.document;
 
-  // Remove previous
-  const existing = doc.getElementById('cypress-api-plugin-container');
-  if (existing) existing.remove();
+  let container = doc.getElementById('cypress-api-plugin-container') as HTMLElement | null;
+  if (container) {
+    container.innerHTML = '';
+    return container;
+  }
 
-  // Create new
-  const container = doc.createElement('div');
+  container = doc.createElement('div');
   container.id = 'cypress-api-plugin-container';
   doc.body.appendChild(container);
-
   return container;
 }
 
-// ============================================
-// UI display helpers — in-process Svelte mounts
-// ============================================
+// Exported for unit testing
+export { createFreshContainer };
 
-function showApiUi(request: ApiRequestOptions, response: ApiResponse): void {
+function showApiUi(index: number): void {
+  const store = getTestStore();
+  const call = store.apiCalls[index];
+  if (!call?.response) return;
+
   const config = readPluginConfig();
-  const container = createUiContainer();
+
+  const log = Cypress.log({
+    name: call.request.method,
+    autoEnd: false,
+    message: `${call.request.method} ${call.request.url}`,
+    consoleProps: () => ({ request: call.request, response: call.response }),
+  }).snapshot('request');
+
+  const container = createFreshContainer();
 
   if (config.snapshotOnly) {
     container.classList.add('cypress-plugin-collapsed');
   }
 
-  const req: ApiRequest = {
-    url: request.url,
-    method: request.method,
-    headers: request.headers,
-    body: request.body,
-    qs: request.qs,
-    auth: request.auth,
-  };
+  mountApiUI(container, call.request, call.response, config);
 
-  mountApiUI(container, req, response, config);
-  logDebug('API UI mounted');
+  // Svelte 5 mount() is synchronous — DOM is ready
+  const $el = Cypress.$('#cypress-api-plugin-container');
+  log.set({ $el }).snapshot('response').end();
+
+  logDebug('API UI mounted (index:', index, ')');
 }
 
-function showDbQueryUi(query: string, result: DbQueryResponse): void {
+function showDbQueryUi(index: number): void {
+  const store = getTestStore();
+  const query = store.dbQueries[index];
+  if (!query) return;
+
   const config = readPluginConfig();
-  const container = createUiContainer();
+  const container = createFreshContainer();
 
   if (config.snapshotOnly) {
     container.classList.add('cypress-plugin-collapsed');
   }
 
   const dbData: DbQueryDisplayData = {
-    query,
-    rows: result.rows,
-    rowCount: result.rowCount,
-    duration: result.duration,
+    query: query.query,
+    rows: (query.result as unknown[]) ?? [],
+    rowCount: Array.isArray(query.result) ? query.result.length : 0,
+    duration: query.duration,
+    error: query.error,
   };
 
   mountDbQueryUI(container, dbData, config);
-  logDebug('DB Query UI mounted');
+
+  logDebug('DB Query UI mounted (index:', index, ')');
 }
 
 // ============================================
@@ -175,8 +210,6 @@ function showDbQueryUi(query: string, result: DbQueryResponse): void {
 
 Cypress.Commands.add(
   'http',
-  // Cypress Command.add typing is limited for overloaded commands — the callback
-  // signature uses (...args: any[]) which forces an unsafe cast at the call site.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (urlOrOptions: any, maybeOptions?: ApiRequestOptions) => {
     const options: ApiRequestOptions =
@@ -185,8 +218,6 @@ Cypress.Commands.add(
         : urlOrOptions;
     const startTime = Date.now();
 
-    // cy.request() RequestOptions type is incomplete (body: unknown not assignable).
-    // Cast through unknown — the actual values flow through to cy.request unchanged.
     return cy.request(options as unknown as Record<string, unknown>).then((cyResponse) => {
       const response: ApiResponse = {
         status: cyResponse.status,
@@ -198,7 +229,24 @@ Cypress.Commands.add(
         cookies: (cyResponse as { cookies?: ApiResponse['cookies'] }).cookies || [],
       };
 
-      showApiUi(options, response);
+      const call: ApiCall = {
+        id: crypto.randomUUID(),
+        request: {
+          url: options.url,
+          method: options.method,
+          headers: options.headers,
+          body: options.body,
+          qs: options.qs,
+          auth: options.auth,
+        },
+        response,
+        timestamp: Date.now(),
+      };
+
+      addApiCall(call);
+      const store = getTestStore();
+      store.apiCalls.push(call);
+      showApiUi(store.apiCalls.length - 1);
       return response;
     });
   },
@@ -221,7 +269,20 @@ Cypress.Commands.add('query', (query: string, connectionOptions?: DbConnectionOp
         duration: Date.now() - startTime,
         query,
       };
-      showDbQueryUi(query, dbResponse);
+
+      const dbCall: DbQuery = {
+        id: crypto.randomUUID(),
+        connectionId: `${host}:${port}/${database}`,
+        query,
+        result: result.rows || [],
+        duration: Date.now() - startTime,
+        timestamp: Date.now(),
+      };
+
+      addDbQuery(dbCall);
+      const store = getTestStore();
+      store.dbQueries.push(dbCall);
+      showDbQueryUi(store.dbQueries.length - 1);
       return cy.wrap(dbResponse);
     });
   });

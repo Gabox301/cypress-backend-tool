@@ -47,3 +47,11 @@ export function updateDbConnection(id: string, updates: Partial<DbConnection>) {
     Object.assign(conn, updates);
   }
 }
+
+export function clearApiCalls() {
+  apiCalls.length = 0;
+}
+
+export function clearDbQueries() {
+  dbQueries.length = 0;
+}

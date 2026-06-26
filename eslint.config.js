@@ -4,7 +4,7 @@ import globals from 'globals';
 import svelteParser from 'svelte-eslint-parser';
 import tseslint from 'typescript-eslint';
 
-export default tseslint.config(
+export default [
   // -----------------------------------------------------------------------
   // Base: ignore patterns
   // -----------------------------------------------------------------------
@@ -13,6 +13,7 @@ export default tseslint.config(
       'dist/**',
       'node_modules/**',
       'cypress-plugin-api-main/**',
+      'docs/**',
       '.atl/**',
       '.vscode/**',
       'openspec/**',
@@ -20,14 +21,12 @@ export default tseslint.config(
       'package-lock.json',
     ],
   },
-
   // -----------------------------------------------------------------------
   // Recommended rulesets
   // -----------------------------------------------------------------------
   js.configs.recommended,
   ...tseslint.configs.recommended,
   ...sveltePlugin.configs.recommended,
-
   // -----------------------------------------------------------------------
   // Global language options for all files
   // -----------------------------------------------------------------------
@@ -39,7 +38,6 @@ export default tseslint.config(
       },
     },
   },
-
   // -----------------------------------------------------------------------
   // TypeScript source files
   // -----------------------------------------------------------------------
@@ -60,7 +58,6 @@ export default tseslint.config(
       'no-debugger': 'error',
     },
   },
-
   // -----------------------------------------------------------------------
   // Config files — no tsconfig project needed
   // -----------------------------------------------------------------------
@@ -73,7 +70,6 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'off',
     },
   },
-
   // -----------------------------------------------------------------------
   // Svelte files — override TS parser with Svelte parser
   // -----------------------------------------------------------------------
@@ -96,7 +92,6 @@ export default tseslint.config(
       'no-undef': 'off',
     },
   },
-
   // -----------------------------------------------------------------------
   // Cypress E2E test files — relaxed rules
   // -----------------------------------------------------------------------
@@ -109,7 +104,6 @@ export default tseslint.config(
       'no-console': 'off',
     },
   },
-
   // -----------------------------------------------------------------------
   // Cypress support files
   // -----------------------------------------------------------------------
@@ -119,7 +113,6 @@ export default tseslint.config(
       '@typescript-eslint/no-namespace': 'off',
     },
   },
-
   // -----------------------------------------------------------------------
   // Unit test files — relaxed rules
   // -----------------------------------------------------------------------
@@ -130,4 +123,4 @@ export default tseslint.config(
       'no-console': 'off',
     },
   },
-);
+];

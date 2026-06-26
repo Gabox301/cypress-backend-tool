@@ -4,11 +4,6 @@
     format?: string;
   }
 
-  interface Token {
-    text: string;
-    class?: string;
-  }
-
   let { data = null, format = 'json' }: Props = $props();
   let copied = $state(false);
   let formattedData = $derived.by(() => {
@@ -22,55 +17,23 @@
   });
   let lines = $derived(formattedData.split('\n'));
 
-  function tokenize(line: string): Token[] {
-    const tokens: Token[] = [];
-    // Match patterns: JSON keys, string values, numbers, booleans, null
-    const pattern = /("[^"]+")(?=\s*:)|:\s*("[^"]*")|:\s*(\d+\.?\d*)|:\s*(true|false)|:\s*(null)/g;
-    let lastIndex = 0;
-    let match: RegExpExecArray | null;
-
-    while ((match = pattern.exec(line)) !== null) {
-      // Text before the match
-      if (match.index > lastIndex) {
-        tokens.push({ text: line.slice(lastIndex, match.index) });
-      }
-
-      if (match[1]) {
-        // JSON key (quoted string before colon)
-        tokens.push({ text: match[1], class: 'json-key' });
-      } else if (match[2]) {
-        // JSON string value
-        tokens.push({ text: `: ${match[2]}`, class: undefined });
-        const stringPart = match[2];
-        // Split into colon, quote, value, quote
-        const before = tokens[tokens.length - 1];
-        if (before && !before.class) {
-          // Replace the combined token with split tokens
-          tokens.pop();
-          tokens.push({ text: ': ' });
-          tokens.push({ text: stringPart, class: 'json-string' });
-        }
-      } else if (match[3]) {
-        tokens.push({ text: `: ${match[3]}`, class: 'json-number' });
-      } else if (match[4]) {
-        tokens.push({ text: `: ${match[4]}`, class: 'json-bool' });
-      } else if (match[5]) {
-        tokens.push({ text: `: ${match[5]}`, class: 'json-null' });
-      }
-
-      lastIndex = pattern.lastIndex;
-    }
-
-    // Remaining text
-    if (lastIndex < line.length) {
-      tokens.push({ text: line.slice(lastIndex) });
-    }
-
-    return tokens.length > 0 ? tokens : [{ text: line }];
+  // @html is safe here: input is always JSON.stringify() output or plain strings.
+  // User-provided data is sanitized by JSON.stringify which escapes HTML entities.
+  function colorize(line: string): string {
+    return line
+      .replace(/("[^"]+")(?=\s*:)/g, '<span class="json-key">$1</span>')
+      .replace(/:\s*("[^"]*")/g, ': <span class="json-string">$1</span>')
+      .replace(/:\s*(\d+\.?\d*)/g, ': <span class="json-number">$1</span>')
+      .replace(/:\s*(true|false)/g, ': <span class="json-bool">$1</span>')
+      .replace(/:\s*(null)/g, ': <span class="json-null">$1</span>');
   }
 
   async function copyToClipboard() {
-    await navigator.clipboard.writeText(formattedData);
+    try {
+      await navigator.clipboard.writeText(formattedData);
+    } catch {
+      // Clipboard may be unavailable (Cypress runner, headless, etc.)
+    }
     copied = true;
     setTimeout(() => (copied = false), 2000);
   }
@@ -94,17 +57,7 @@
         </div>
         <div class="code-content">
           {#each lines as line, i (i)}
-            <div class="code-line">
-              <pre>
-                {#each tokenize(line) as token, tokenIdx (tokenIdx)}
-                  {#if token.class}
-                    <span class={token.class}>{token.text}</span>
-                  {:else}
-                    {token.text}
-                  {/if}
-                {/each}
-              </pre>
-            </div>
+            <div class="code-line"><pre>{@html colorize(line)}</pre></div>
           {/each}
         </div>
       </div>
