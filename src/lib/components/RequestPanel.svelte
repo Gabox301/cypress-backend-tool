@@ -3,25 +3,83 @@
   import CodeBlock from './CodeBlock.svelte';
   import Icon from './Icon.svelte';
   import TitlePanel from './TitlePanel.svelte';
-
   interface Props {
     request: ApiRequest | null;
     selectedTab?: string;
     onTabChange?: (tab: string) => void;
+    hideCredentials?: boolean;
+    hideCredentialsOptions?: {
+      headers: boolean;
+      auth: boolean;
+      body: boolean;
+      query: boolean;
+    };
   }
-
-  let { request = null, selectedTab: controlledTab, onTabChange }: Props = $props();
-
+  let {
+    request = null,
+    selectedTab: controlledTab,
+    onTabChange,
+    hideCredentials = false,
+    hideCredentialsOptions = { headers: true, auth: true, body: true, query: true },
+  }: Props = $props();
   let internalTab = $state<string>('body');
   let selectedTab = $derived(controlledTab ?? internalTab);
   let method = $derived(request?.method || 'GET');
   let url = $derived(request?.url || '');
 
+  // Credential masking — blank all values for masked tabs
+  function maskObject(obj: Record<string, unknown>): Record<string, string> {
+    const result: Record<string, string> = {};
+    for (const key of Object.keys(obj)) {
+      result[key] = '***';
+    }
+    return result;
+  }
+
+  function deepMask(val: unknown): unknown {
+    if (val === null || val === undefined) return val;
+    if (typeof val === 'object' && !Array.isArray(val)) {
+      return maskObject(val as Record<string, unknown>);
+    }
+    return '***';
+  }
+
+  let maskedHeaders = $derived.by(() => {
+    if (!request?.headers) return undefined;
+    if (hideCredentials && hideCredentialsOptions.headers) {
+      return maskObject(request.headers);
+    }
+    return request.headers;
+  });
+
+  let maskedAuth = $derived.by(() => {
+    if (!request?.auth) return undefined;
+    if (hideCredentials && hideCredentialsOptions.auth) {
+      return maskObject(request.auth as unknown as Record<string, unknown>);
+    }
+    return request.auth;
+  });
+
+  let maskedBody = $derived.by(() => {
+    if (request?.body === undefined || request?.body === null) return request?.body;
+    if (hideCredentials && hideCredentialsOptions.body) {
+      return deepMask(request.body);
+    }
+    return request.body;
+  });
+
+  let maskedQs = $derived.by(() => {
+    if (!request?.qs) return undefined;
+    if (hideCredentials && hideCredentialsOptions.query) {
+      return maskObject(request.qs);
+    }
+    return request.qs;
+  });
+
   function handleTabChange(tab: string) {
     if (controlledTab === undefined) internalTab = tab;
     onTabChange?.(tab);
   }
-
   const tabs = [
     { id: 'body', label: 'Body' },
     { id: 'query', label: 'Query' },
@@ -29,7 +87,6 @@
     { id: 'auth', label: 'Auth' },
     { id: 'curl', label: 'cURL' },
   ] as const;
-
   let curlCommand = $derived.by(() => {
     if (!request || selectedTab !== 'curl') return '';
     const headersPart = request.headers
@@ -42,40 +99,38 @@
   });
 </script>
 
-<div class="panel">
+<div class="panel" data-testid="request-panel">
   <TitlePanel {method} {url} />
-
   {#if request}
     <div class="tabs-bar">
-      {#each tabs as tab}
+      {#each tabs as tab (tab.id)}
         <button class="tab-btn" class:active={selectedTab === tab.id} onclick={() => handleTabChange(tab.id)}>
           {tab.label}
         </button>
       {/each}
     </div>
-
     <div class="content-area">
       {#if selectedTab === 'body'}
-        {#if request.body && Object.keys(request.body).length > 0}
-          <CodeBlock data={request.body} />
+        {#if maskedBody != null}
+          <CodeBlock data={maskedBody} />
         {:else}
           <div class="empty-tab"><span class="empty-text">Sin body</span></div>
         {/if}
       {:else if selectedTab === 'query'}
-        {#if request.qs && Object.keys(request.qs).length > 0}
-          <CodeBlock data={request.qs} />
+        {#if maskedQs && Object.keys(maskedQs).length > 0}
+          <CodeBlock data={maskedQs} />
         {:else}
           <div class="empty-tab"><span class="empty-text">Sin query params</span></div>
         {/if}
       {:else if selectedTab === 'headers'}
-        {#if request.headers && Object.keys(request.headers).length > 0}
-          <CodeBlock data={request.headers} />
+        {#if maskedHeaders && Object.keys(maskedHeaders).length > 0}
+          <CodeBlock data={maskedHeaders} />
         {:else}
           <div class="empty-tab"><span class="empty-text">Sin headers</span></div>
         {/if}
       {:else if selectedTab === 'auth'}
-        {#if request.auth && Object.keys(request.auth).length > 0}
-          <CodeBlock data={request.auth} />
+        {#if maskedAuth && Object.keys(maskedAuth).length > 0}
+          <CodeBlock data={maskedAuth} />
         {:else}
           <div class="empty-tab"><span class="empty-text">Sin auth</span></div>
         {/if}
@@ -95,15 +150,14 @@
   .panel {
     display: flex;
     flex-direction: column;
-    flex: 1; /* ← clave */
-    min-height: 0; /* ← clave */
+    flex: 1;
+    min-height: 0;
     background: #080c14;
     border-radius: 10px;
     border: 1px solid rgba(255, 255, 255, 0.06);
     overflow: hidden;
     font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', Consolas, Monaco, monospace;
   }
-
   .tabs-bar {
     display: flex;
     gap: 2px;
@@ -113,7 +167,6 @@
     background: rgba(0, 0, 0, 0.15);
     flex-shrink: 0;
   }
-
   .tab-btn {
     position: relative;
     display: inline-flex;
@@ -135,17 +188,14 @@
     white-space: nowrap;
     flex-shrink: 0;
   }
-
   .tab-btn:hover:not(.active) {
     color: #94a3b8;
     background: rgba(255, 255, 255, 0.04);
   }
-
   .tab-btn.active {
     color: #00d4ff;
     background: rgba(0, 212, 255, 0.08);
   }
-
   .tab-btn.active::after {
     content: '';
     position: absolute;
@@ -158,7 +208,6 @@
     border-radius: 2px 2px 0 0;
     box-shadow: 0 0 8px #00d4ff;
   }
-
   .content-area {
     flex: 1;
     min-height: 0;
@@ -167,7 +216,6 @@
     display: flex;
     flex-direction: column;
   }
-
   .empty-state {
     flex: 1;
     display: flex;
@@ -177,26 +225,22 @@
     gap: 12px;
     color: rgba(100, 116, 139, 0.5);
   }
-
   .empty-icon {
     display: inline-flex;
     align-items: center;
     opacity: 0.25;
   }
-
   .empty-icon :global(svg) {
     width: 36px;
     height: 36px;
     filter: grayscale(1);
   }
-
   .empty-text {
     font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.1em;
     text-transform: uppercase;
   }
-
   .empty-tab {
     flex: 1;
     display: flex;

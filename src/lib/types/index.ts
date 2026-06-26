@@ -9,7 +9,6 @@ export interface ApiRequest {
   auth?: { username: string; password: string };
 }
 
-// Versión extendida para el plugin Cypress
 export interface ApiRequestOptions extends ApiRequest {
   auth?: { username: string; password: string };
   failOnStatusCode?: boolean;
@@ -36,19 +35,19 @@ export interface ApiResponse {
   }>;
 }
 
-// Configuración del plugin Cypress
 export interface CypressApiPluginConfig {
-  snapshotOnly?: boolean;
-  hideCredentials?: boolean;
-  hideCredentialsOptions?: {
-    headers?: string[];
-    auth?: string[];
-    body?: string[];
-    query?: string[];
+  snapshotOnly: boolean;
+  hideCredentials: boolean;
+  hideCredentialsOptions: {
+    headers: boolean;
+    auth: boolean;
+    body: boolean;
+    query: boolean;
   };
+  requestMode: 'auto' | 'manual';
+  CYPRESS_PLUGIN_DEBUG: boolean;
 }
 
-// Resultado de query de base de datos
 export interface DbQueryResult {
   rows: unknown[];
   rowCount: number;
@@ -56,7 +55,6 @@ export interface DbQueryResult {
   fields: Array<{ name: string; dataTypeID: number }>;
 }
 
-// Datos para mostrar una query de base de datos en la UI
 export interface DbQueryDisplayData {
   query: string;
   rows: unknown[];

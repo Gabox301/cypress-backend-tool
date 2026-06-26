@@ -4,9 +4,13 @@
     format?: string;
   }
 
+  interface Token {
+    text: string;
+    class?: string;
+  }
+
   let { data = null, format = 'json' }: Props = $props();
   let copied = $state(false);
-
   let formattedData = $derived.by(() => {
     if (!data) return '';
     if (typeof data === 'string') return data;
@@ -16,16 +20,53 @@
       return String(data);
     }
   });
-
   let lines = $derived(formattedData.split('\n'));
 
-  function colorize(line: string): string {
-    return line
-      .replace(/(\"[^\"]+\")(?=\s*:)/g, '<span class="json-key">$1</span>')
-      .replace(/:\s*(\"[^\"]*\")/g, ': <span class="json-string">$1</span>')
-      .replace(/:\s*(\d+\.?\d*)/g, ': <span class="json-number">$1</span>')
-      .replace(/:\s*(true|false)/g, ': <span class="json-bool">$1</span>')
-      .replace(/:\s*(null)/g, ': <span class="json-null">$1</span>');
+  function tokenize(line: string): Token[] {
+    const tokens: Token[] = [];
+    // Match patterns: JSON keys, string values, numbers, booleans, null
+    const pattern = /("[^"]+")(?=\s*:)|:\s*("[^"]*")|:\s*(\d+\.?\d*)|:\s*(true|false)|:\s*(null)/g;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = pattern.exec(line)) !== null) {
+      // Text before the match
+      if (match.index > lastIndex) {
+        tokens.push({ text: line.slice(lastIndex, match.index) });
+      }
+
+      if (match[1]) {
+        // JSON key (quoted string before colon)
+        tokens.push({ text: match[1], class: 'json-key' });
+      } else if (match[2]) {
+        // JSON string value
+        tokens.push({ text: `: ${match[2]}`, class: undefined });
+        const stringPart = match[2];
+        // Split into colon, quote, value, quote
+        const before = tokens[tokens.length - 1];
+        if (before && !before.class) {
+          // Replace the combined token with split tokens
+          tokens.pop();
+          tokens.push({ text: ': ' });
+          tokens.push({ text: stringPart, class: 'json-string' });
+        }
+      } else if (match[3]) {
+        tokens.push({ text: `: ${match[3]}`, class: 'json-number' });
+      } else if (match[4]) {
+        tokens.push({ text: `: ${match[4]}`, class: 'json-bool' });
+      } else if (match[5]) {
+        tokens.push({ text: `: ${match[5]}`, class: 'json-null' });
+      }
+
+      lastIndex = pattern.lastIndex;
+    }
+
+    // Remaining text
+    if (lastIndex < line.length) {
+      tokens.push({ text: line.slice(lastIndex) });
+    }
+
+    return tokens.length > 0 ? tokens : [{ text: line }];
   }
 
   async function copyToClipboard() {
@@ -35,7 +76,7 @@
   }
 </script>
 
-<div class="wrapper">
+<div class="wrapper" data-testid="code-block">
   {#if data}
     <div class="code-container">
       <div class="code-header">
@@ -44,7 +85,6 @@
           {copied ? '✓ copied' : 'copy'}
         </button>
       </div>
-
       <div class="code-body">
         <div class="gutter">
           {#each lines as _, i (i)}
@@ -54,8 +94,17 @@
         </div>
         <div class="code-content">
           {#each lines as line, i (i)}
-            <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-            <div class="code-line"><pre>{@html colorize(line)}</pre></div>
+            <div class="code-line">
+              <pre>
+                {#each tokenize(line) as token, tokenIdx (tokenIdx)}
+                  {#if token.class}
+                    <span class={token.class}>{token.text}</span>
+                  {:else}
+                    {token.text}
+                  {/if}
+                {/each}
+              </pre>
+            </div>
           {/each}
         </div>
       </div>
@@ -68,10 +117,9 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    flex: 1; /* ← AGREGAR */
+    flex: 1;
     min-height: 0;
   }
-
   .code-container {
     background: #060a10;
     border: 1px solid rgba(0, 212, 255, 0.08);
@@ -86,7 +134,6 @@
     display: flex;
     flex-direction: column;
   }
-
   .code-header {
     display: flex;
     align-items: center;
@@ -96,7 +143,6 @@
     border-bottom: 1px solid rgba(0, 212, 255, 0.06);
     flex-shrink: 0;
   }
-
   .format-badge {
     font-size: 10px;
     font-weight: 700;
@@ -104,7 +150,6 @@
     text-transform: uppercase;
     color: rgba(0, 212, 255, 0.45);
   }
-
   .copy-btn {
     padding: 2px 10px;
     font-size: 10px;
@@ -118,26 +163,22 @@
     cursor: pointer;
     transition: all 0.2s;
   }
-
   .copy-btn:hover {
     color: #00d4ff;
     border-color: rgba(0, 212, 255, 0.3);
     background: rgba(0, 212, 255, 0.06);
   }
-
   .copy-btn.done {
     color: #4ade80;
     border-color: rgba(74, 222, 128, 0.3);
     background: rgba(74, 222, 128, 0.06);
   }
-
   .code-body {
     flex: 1;
     overflow: auto;
     min-height: 0;
     display: flex;
   }
-
   .gutter {
     display: flex;
     flex-direction: column;
@@ -150,27 +191,22 @@
     min-width: 40px;
     flex-shrink: 0;
   }
-
   .gutter-filler {
     flex: 1;
     min-height: 0;
   }
-
   .code-content {
     flex: 1;
     min-width: 0;
     min-height: 100%;
   }
-
   .line-num {
     padding: 0;
   }
-
   .code-line {
     padding: 0 16px;
     overflow-x: visible;
   }
-
   .code-line pre {
     margin: 0;
     padding: 0;
@@ -181,7 +217,6 @@
     white-space: pre;
     color: #94a3b8;
   }
-
   :global(.json-key) {
     color: #7dd3fc;
   }

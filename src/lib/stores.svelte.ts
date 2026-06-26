@@ -1,12 +1,25 @@
-import type { ApiCall, DbConnection, DbQuery } from './types';
+import type { ApiCall, CypressApiPluginConfig, DbConnection, DbQuery } from './types';
 
 // Estados globales reactivos usando Svelte 5 runes
-
 export const apiCalls = $state<ApiCall[]>([]);
 export const dbQueries = $state<DbQuery[]>([]);
 export const dbConnectionsGlobal = $state<DbConnection[]>([]);
 export const activeTab = $state<string | null>(null);
 export const isLoading = $state(false);
+
+// Configuración reactiva del plugin — alimentada desde getPluginConfig() vía App.svelte props
+export const pluginConfig = $state<CypressApiPluginConfig>({
+  snapshotOnly: false,
+  hideCredentials: false,
+  hideCredentialsOptions: {
+    headers: true,
+    auth: true,
+    body: true,
+    query: true,
+  },
+  requestMode: 'auto',
+  CYPRESS_PLUGIN_DEBUG: false,
+});
 
 // Funciones helper para manipular el estado
 export function addApiCall(call: ApiCall) {

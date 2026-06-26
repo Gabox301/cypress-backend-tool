@@ -1,13 +1,10 @@
 <script lang="ts">
   import type { HttpMethod } from '$lib/types';
-
   interface Props {
     method?: HttpMethod;
     url?: string;
   }
-
   let { method = 'GET', url = '' }: Props = $props();
-
   const methodConfig: Record<HttpMethod, { color: string; glow: string; bg: string }> = {
     GET: { color: '#91D2A1', glow: '0 0 10px rgba(145,210,161,0.4)', bg: 'rgba(145,210,161,0.1)' },
     POST: { color: '#EDBA5E', glow: '0 0 10px rgba(237,186,94,0.4)', bg: 'rgba(237,186,94,0.1)' },
@@ -17,9 +14,7 @@
     HEAD: { color: '#6BB5D6', glow: '0 0 10px rgba(107,181,214,0.4)', bg: 'rgba(107,181,214,0.1)' },
     OPTIONS: { color: '#D6709E', glow: '0 0 10px rgba(214,112,158,0.4)', bg: 'rgba(214,112,158,0.1)' },
   };
-
   let cfg = $derived(methodConfig[method] ?? methodConfig['GET']);
-
   let urlParts = $derived.by(() => {
     if (!url) return { origin: '', path: '', full: '' };
     try {
@@ -32,14 +27,12 @@
       return { origin, path, full: url };
     }
   });
-
   let tooltip = $state<{ visible: boolean; text: string; x: number; y: number }>({
     visible: false,
     text: '',
     x: 0,
     y: 0,
   });
-
   function handleMouseEnter(text: string, event: MouseEvent) {
     const rect = (event.target as HTMLElement).getBoundingClientRect();
     tooltip = {
@@ -49,7 +42,6 @@
       y: rect.bottom + 4,
     };
   }
-
   function handleMouseLeave() {
     tooltip.visible = false;
   }
@@ -67,7 +59,6 @@
   >
     {method}
   </span>
-
   {#if url}
     <div class="url-container">
       <span
@@ -88,7 +79,6 @@
   {:else}
     <span class="url-empty">sin URL</span>
   {/if}
-
   {#if tooltip.visible}
     <div class="custom-tooltip" style="left: {tooltip.x}px; top: {tooltip.y}px;">
       {tooltip.text}
@@ -97,7 +87,6 @@
 </div>
 
 <style>
-  /* Usar fuentes del sistema en lugar de Google Fonts */
   .title-panel {
     display: flex;
     align-items: center;
@@ -111,8 +100,6 @@
     white-space: nowrap;
     overflow: hidden;
   }
-
-  /* The method badge glows in its verb's signature color */
   .method-badge {
     display: inline-flex;
     align-items: center;
@@ -127,7 +114,6 @@
     border: 1px solid;
     flex-shrink: 0;
   }
-
   .url-container {
     display: flex;
     align-items: center;
@@ -138,15 +124,11 @@
     font-size: 12.5px;
     white-space: nowrap;
   }
-
-  /* The host/origin is dimmed — it's context, not content */
   .url-origin {
     color: rgba(148, 163, 184, 0.45);
     white-space: nowrap;
     flex-shrink: 0;
   }
-
-  /* The path gets full brightness — it's the meaningful part */
   .url-path {
     color: #e2e8f0;
     white-space: nowrap;
@@ -154,14 +136,12 @@
     text-overflow: ellipsis;
     min-width: 0;
   }
-
   .url-empty {
     color: rgba(100, 116, 139, 0.45);
     font-style: italic;
     font-family: 'JetBrains Mono', monospace;
     font-size: 12px;
   }
-
   .custom-tooltip {
     position: fixed;
     z-index: 10000;

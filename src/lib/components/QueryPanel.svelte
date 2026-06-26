@@ -1,7 +1,4 @@
 <script lang="ts">
-  import CodeBlock from './CodeBlock.svelte';
-  import Icon from './Icon.svelte';
-
   interface Props {
     query: string;
     rowCount: number;
@@ -9,9 +6,7 @@
     rows: unknown[];
     error?: string;
   }
-
   let { query, rowCount, duration, rows, error }: Props = $props();
-
   let tableRows = $derived(() => {
     if (rows.length === 0) return [];
     if (typeof rows[0] !== 'object' || rows[0] === null) {
@@ -19,7 +14,6 @@
     }
     return rows as Record<string, unknown>[];
   });
-
   let columns = $derived(() => {
     if (rows.length === 0) return [];
     if (typeof rows[0] !== 'object' || rows[0] === null) {
@@ -27,13 +21,9 @@
     }
     return Object.keys(rows[0] as Record<string, unknown>);
   });
-
   function getCellValue(row: unknown, col: string): string {
-    if (typeof row === 'object' && row !== null) {
-      const obj = row as Record<string, unknown>;
-      return obj[col] !== undefined ? String(obj[col]) : '';
-    }
-    return String(row);
+    const obj = row as Record<string, unknown>;
+    return obj[col] !== undefined ? String(obj[col]) : '';
   }
 </script>
 
@@ -47,7 +37,6 @@
       <span class="meta-pill">{duration}ms</span>
     </div>
   </div>
-
   <div class="content-area">
     {#if error}
       <div class="error-block">
@@ -60,7 +49,6 @@
           <pre class="query-text">{query}</pre>
         </div>
       </div>
-
       <div class="section results-section">
         <div class="section-label">Results</div>
         {#if rows.length > 0}
@@ -68,15 +56,15 @@
             <table class="results-table">
               <thead>
                 <tr>
-                  {#each columns() as col}
+                  {#each columns() as col (col)}
                     <th>{col}</th>
                   {/each}
                 </tr>
               </thead>
               <tbody>
-                {#each tableRows() as row}
+                {#each tableRows() as row, rowIdx (rowIdx)}
                   <tr>
-                    {#each columns() as col}
+                    {#each columns() as col (col)}
                       <td>{getCellValue(row, col)}</td>
                     {/each}
                   </tr>
@@ -104,7 +92,6 @@
     overflow: hidden;
     font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', Consolas, Monaco, monospace;
   }
-
   .query-header {
     display: flex;
     align-items: center;
@@ -115,7 +102,6 @@
     background: rgba(0, 0, 0, 0.2);
     flex-shrink: 0;
   }
-
   .db-badge {
     display: inline-flex;
     align-items: center;
@@ -123,12 +109,10 @@
     font-size: 12px;
     font-weight: 600;
   }
-
   .query-meta {
     display: flex;
     gap: 6px;
   }
-
   .meta-pill {
     display: inline-flex;
     align-items: center;
@@ -141,7 +125,6 @@
     background: rgba(34, 211, 238, 0.08);
     border: 1px solid rgba(34, 211, 238, 0.15);
   }
-
   .content-area {
     flex: 1;
     min-height: 0;
@@ -151,19 +134,16 @@
     flex-direction: column;
     gap: 16px;
   }
-
   .section {
     display: flex;
     flex-direction: column;
     gap: 8px;
   }
-
   .results-section {
     flex: 1;
     min-height: 0;
     overflow: hidden;
   }
-
   .section-label {
     font-size: 10px;
     font-weight: 700;
@@ -171,7 +151,6 @@
     text-transform: uppercase;
     color: rgba(148, 163, 184, 0.5);
   }
-
   .code-container {
     background: #060a10;
     border: 1px solid rgba(0, 212, 255, 0.08);
@@ -179,7 +158,6 @@
     padding: 10px 12px;
     overflow-x: auto;
   }
-
   .query-text {
     margin: 0;
     color: #86efac;
@@ -187,7 +165,6 @@
     white-space: pre-wrap;
     word-break: break-all;
   }
-
   .table-wrapper {
     flex: 1;
     overflow: auto;
@@ -195,13 +172,11 @@
     border: 1px solid rgba(0, 212, 255, 0.08);
     border-radius: 6px;
   }
-
   .results-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 11.5px;
   }
-
   .results-table thead th {
     position: sticky;
     top: 0;
@@ -213,7 +188,6 @@
     border-bottom: 1px solid rgba(0, 212, 255, 0.15);
     white-space: nowrap;
   }
-
   .results-table tbody td {
     padding: 6px 12px;
     color: #94a3b8;
@@ -223,11 +197,9 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-
   .results-table tbody tr:hover td {
     background: rgba(255, 255, 255, 0.02);
   }
-
   .error-block {
     display: flex;
     align-items: center;
@@ -236,10 +208,9 @@
     background: rgba(239, 68, 68, 0.1);
     border: 1px solid rgba(239, 68, 68, 0.2);
     border-radius: 8px;
-    color: #EF4444;
+    color: #ef4444;
     font-size: 12px;
   }
-
   .empty-result {
     color: rgba(148, 163, 184, 0.5);
     font-size: 12px;

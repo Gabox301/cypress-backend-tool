@@ -3,14 +3,12 @@
   import { onMount } from 'svelte';
   import CodeBlock from './CodeBlock.svelte';
   import Icon from './Icon.svelte';
-
   interface Props {
     response: ApiResponse | null;
+    snapshotOnly?: boolean;
   }
-
-  let { response = null }: Props = $props();
+  let { response = null, snapshotOnly: _snapshotOnly = false }: Props = $props();
   let selectedTab = $state<'body' | 'headers' | 'cookies'>('body');
-
   const statusConfig = $derived.by(() => {
     if (!response) return null;
     const s = response.status;
@@ -20,7 +18,6 @@
     if (s >= 500) return { color: '#fb923c', glow: 'rgba(251,146,60,0.35)', label: 'SERVER' };
     return { color: '#94a3b8', glow: 'rgba(148,163,184,0.2)', label: 'INFO' };
   });
-
   let formattedSize = $derived.by(() => {
     if (!response) return '';
     const bytes = response.size;
@@ -28,7 +25,6 @@
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   });
-
   onMount(() => {
     const id = 'cypress-api-db-ui-overrides';
     if (!document.getElementById(id)) {
@@ -132,7 +128,6 @@
       </div>
     {/if}
   </div>
-
   {#if response}
     <div class="tabs-bar">
       <button class="tab-btn" class:active={selectedTab === 'body'} onclick={() => (selectedTab = 'body')}>Body</button>
@@ -143,7 +138,6 @@
         >Cookies</button
       >
     </div>
-
     <div class="content-area">
       {#if selectedTab === 'body'}
         <CodeBlock data={response.body} format="json" />
@@ -198,7 +192,6 @@
     overflow: hidden;
     font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', Consolas, Monaco, monospace;
   }
-
   .response-header {
     display: flex;
     align-items: center;
@@ -211,7 +204,6 @@
     gap: 12px;
     overflow: hidden;
   }
-
   .status-group {
     display: inline-flex;
     align-items: center;
@@ -221,7 +213,6 @@
     min-width: 0;
     overflow: hidden;
   }
-
   .status-dot {
     width: 7px;
     height: 7px;
@@ -229,7 +220,6 @@
     flex-shrink: 0;
     animation: pulse 2.2s ease-in-out infinite;
   }
-
   @keyframes pulse {
     0%,
     100% {
@@ -241,7 +231,6 @@
       transform: scale(0.75);
     }
   }
-
   .status-code {
     font-family: 'JetBrains Mono', monospace;
     font-size: 16px;
@@ -249,7 +238,6 @@
     letter-spacing: 0.04em;
     white-space: nowrap;
   }
-
   .status-text {
     font-size: 11px;
     font-weight: 600;
@@ -258,7 +246,6 @@
     opacity: 0.55;
     white-space: nowrap;
   }
-
   .tabs-bar {
     display: flex;
     gap: 2px;
@@ -268,7 +255,6 @@
     background: rgba(0, 0, 0, 0.15);
     flex-shrink: 0;
   }
-
   .tab-btn {
     position: relative;
     display: inline-flex;
@@ -290,17 +276,14 @@
     white-space: nowrap;
     flex-shrink: 0;
   }
-
   .tab-btn:hover:not(.active) {
     color: #94a3b8;
     background: rgba(255, 255, 255, 0.04);
   }
-
   .tab-btn.active {
     color: #00d4ff;
     background: rgba(0, 212, 255, 0.08);
   }
-
   .tab-btn.active::after {
     content: '';
     position: absolute;
@@ -313,7 +296,6 @@
     border-radius: 2px 2px 0 0;
     box-shadow: 0 0 8px #00d4ff;
   }
-
   .content-area {
     flex: 1;
     min-height: 0;
@@ -322,14 +304,12 @@
     display: flex;
     flex-direction: column;
   }
-
   .headers-list {
     display: flex;
     flex-direction: column;
     gap: 2px;
     overflow: auto;
   }
-
   .header-row {
     display: grid;
     grid-template-columns: minmax(160px, 220px) 1fr;
@@ -338,11 +318,9 @@
     border-radius: 5px;
     transition: background 0.15s;
   }
-
   .header-row:hover {
     background: rgba(255, 255, 255, 0.03);
   }
-
   .header-key {
     font-family: 'JetBrains Mono', monospace;
     color: #7dd3fc;
@@ -352,21 +330,18 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-
   .header-val {
     font-family: 'JetBrains Mono', monospace;
     color: #94a3b8;
     font-size: 11.5px;
     word-break: break-all;
   }
-
   .cookies-table {
     width: 100%;
     border-collapse: separate;
     border-spacing: 0;
     font-size: 12px;
   }
-
   .cookies-table thead th {
     text-align: left;
     font-size: 10px;
@@ -377,7 +352,6 @@
     padding: 6px 10px 10px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   }
-
   .cookies-table tbody td {
     padding: 8px 10px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.03);
@@ -385,11 +359,9 @@
     font-size: 11.5px;
     transition: background 0.15s;
   }
-
   .cookies-table tbody tr:hover td {
     background: rgba(255, 255, 255, 0.025);
   }
-
   .cookie-name {
     color: #7dd3fc;
     font-weight: 600;
@@ -400,7 +372,6 @@
   .cookie-meta {
     color: rgba(100, 116, 139, 0.65);
   }
-
   .empty-state {
     flex: 1;
     display: flex;
@@ -410,19 +381,16 @@
     gap: 12px;
     color: rgba(100, 116, 139, 0.5);
   }
-
   .empty-icon {
     display: inline-flex;
     align-items: center;
     opacity: 0.25;
   }
-
   .empty-icon :global(svg) {
     width: 36px;
     height: 36px;
     filter: grayscale(1);
   }
-
   .empty-text {
     font-size: 11px;
     font-weight: 600;
