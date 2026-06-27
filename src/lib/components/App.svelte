@@ -1,46 +1,75 @@
 <script lang="ts">
-  import { pluginConfig } from '$lib/stores.svelte';
-  import type { ApiRequest, ApiResponse, CypressApiPluginConfig, DbQueryDisplayData } from '$lib/types';
+  import { apiCalls, dbQueries, pluginConfig } from '$lib/stores.svelte';
+  import type { ApiCall, DbQuery } from '$lib/types';
   import QueryPanel from './QueryPanel.svelte';
   import RequestPanel from './RequestPanel.svelte';
   import ResponsePanel from './ResponsePanel.svelte';
 
-  interface Props {
-    request?: ApiRequest | null;
-    response?: ApiResponse | null;
-    dbQuery?: DbQueryDisplayData | null;
-    config?: CypressApiPluginConfig | null;
-    mode?: 'api' | 'db';
-  }
+  // ────────────────────────────────────────────────────────────────────────
+  // WHY THIS CHANGED
+  //
+  // App used to receive a single {request, response} or {dbQuery} via props
+  // and get *remounted from scratch* into a container that was cleared
+  // (`innerHTML = ''`) before every single call. That meant the DOM node a
+  // past Cypress.log().snapshot() pointed at got wiped out the moment the
+  // next cy.http()/cy.query() ran — so going back to an earlier it()'s (or
+  // an earlier call's) log entry to inspect its snapshot shows whatever the
+  // *latest* call left behind, or an empty overlay if you catch it between
+  // the clear and the next render. That's the "blank window" symptom.
+  //
+  // The fix mirrors cypress-plugin-api (the Vue plugin this was ported
+  // from): mount ONCE, then render every call ever made as its own
+  // permanent entry with a stable id. Nothing is ever cleared or replaced —
+  // new calls are appended, old ones stay exactly as they were rendered.
+  // That's what lets Cypress reliably snapshot any individual command.
+  // ────────────────────────────────────────────────────────────────────────
 
-  let { request = null, response = null, dbQuery = null, config = null, mode = 'api' }: Props = $props();
+  type Entry =
+    | { kind: 'api'; id: string; timestamp: number; call: ApiCall }
+    | { kind: 'db'; id: string; timestamp: number; query: DbQuery };
 
-  // Assign config to the reactive pluginConfig rune on mount (watch for changes)
-  $effect(() => {
-    if (config) {
-      Object.assign(pluginConfig, config);
-    }
+  let entries = $derived.by(() => {
+    const apiEntries: Entry[] = apiCalls.map((call) => ({
+      kind: 'api' as const,
+      id: call.id,
+      timestamp: call.timestamp,
+      call,
+    }));
+    const dbEntries: Entry[] = dbQueries.map((query) => ({
+      kind: 'db' as const,
+      id: query.id,
+      timestamp: query.timestamp,
+      query,
+    }));
+    return [...apiEntries, ...dbEntries].sort((a, b) => a.timestamp - b.timestamp);
   });
-
-  let isDbMode = $derived(mode === 'db' || dbQuery !== null);
 </script>
 
-{#if isDbMode && dbQuery}
-  <QueryPanel
-    query={dbQuery.query}
-    rowCount={dbQuery.rowCount}
-    duration={dbQuery.duration}
-    rows={dbQuery.rows}
-    error={dbQuery.error}
-  />
-{:else}
-  <RequestPanel
-    {request}
-    hideCredentials={pluginConfig.hideCredentials}
-    hideCredentialsOptions={pluginConfig.hideCredentialsOptions}
-  />
-  <ResponsePanel {response} snapshotOnly={pluginConfig.snapshotOnly} />
-{/if}
+<div class="scroll-area">
+  {#each entries as entry (entry.id)}
+    <section id={`cabt-entry-${entry.id}`} class="entry">
+      {#if entry.kind === 'db'}
+        <QueryPanel
+          query={entry.query.query}
+          rowCount={Array.isArray(entry.query.result) ? entry.query.result.length : 0}
+          duration={entry.query.duration}
+          rows={(entry.query.result as unknown[]) ?? []}
+          error={entry.query.error}
+        />
+      {:else}
+        <div class="pair">
+          <RequestPanel
+            request={entry.call.request}
+            hideCredentials={pluginConfig.hideCredentials}
+            hideCredentialsOptions={pluginConfig.hideCredentialsOptions}
+          />
+          <ResponsePanel response={entry.call.response} snapshotOnly={pluginConfig.snapshotOnly} />
+        </div>
+      {/if}
+    </section>
+  {/each}
+  <div class="bottom-anchor"></div>
+</div>
 
 <style>
   :global(body) {
@@ -57,15 +86,39 @@
     border-top: 3px solid #e94560;
     z-index: 9999;
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
-  :global(#cypress-api-plugin-container > *) {
+  /* snapshotOnly: hide the live overlay so the page under test stays usable,
+     WITHOUT removing any entry from the DOM. Every past call stays fully
+     inspectable through Cypress's command-log snapshot/time-travel feature
+     — only its live visibility is toggled, never its content. */
+  :global(#cypress-api-plugin-container.cypress-plugin-collapsed) {
+    display: none;
+  }
+  .scroll-area {
     flex: 1;
     min-height: 0;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
-    padding: 12px;
-    box-sizing: border-box;
+  }
+  .entry {
+    flex-shrink: 0;
+    padding: 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .pair {
+    display: flex;
+    flex-direction: row;
+    gap: 12px;
+    height: min(70vh, 560px);
+  }
+  .pair > :global(*) {
+    flex: 1;
+    min-height: 0;
+  }
+  .bottom-anchor {
+    height: 1px;
   }
 </style>

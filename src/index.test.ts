@@ -83,33 +83,31 @@ afterEach(() => {
 // ===========================================================================
 
 describe('createFreshContainer (Task 2)', () => {
-  let createFreshContainer: () => HTMLElement;
+  let createFreshContainer: (doc?: Document) => HTMLElement;
 
   beforeAll(async () => {
     const mod = await import('./index');
-    createFreshContainer = mod.createFreshContainer;
+    createFreshContainer = (doc?: Document) => mod.createFreshContainer(doc || document);
   });
 
   it('creates container when none exists in the DOM', () => {
-    const container = createFreshContainer();
+    const container = createFreshContainer(document);
     expect(container).toBeInstanceOf(HTMLElement);
     expect(container.id).toBe('cypress-api-plugin-container');
     expect(document.getElementById('cypress-api-plugin-container')).toBe(container);
   });
 
-  it('reuses existing container — clears innerHTML on each call', () => {
-    const first = createFreshContainer();
-    first.innerHTML = '<span>old</span>';
-    const second = createFreshContainer();
+  it('reuses the same container — content accumulates, not cleared', () => {
+    const first = createFreshContainer(document);
+    const second = createFreshContainer(document);
     expect(second).toBe(first); // Same DOM element reused
-    expect(second.innerHTML).toBe(''); // Contents cleared
     expect(document.querySelectorAll('#cypress-api-plugin-container').length).toBe(1);
   });
 
   it('always has exactly one container after any number of calls', () => {
     let last: HTMLElement | null = null;
     for (let i = 0; i < 10; i++) {
-      last = createFreshContainer();
+      last = createFreshContainer(document);
     }
     const all = document.querySelectorAll('#cypress-api-plugin-container');
     expect(all.length).toBe(1);
@@ -275,15 +273,15 @@ describe('store wiring (Task 3)', () => {
 // ===========================================================================
 
 describe('MutationObserver resilience (Task 4)', () => {
-  let createFreshContainer: () => HTMLElement;
+  let createFreshContainer: (doc?: Document) => HTMLElement;
 
   beforeAll(async () => {
     const mod = await import('./index');
-    createFreshContainer = mod.createFreshContainer;
+    createFreshContainer = (doc?: Document) => mod.createFreshContainer(doc || document);
   });
 
   it('removing container from DOM — next call creates fresh one', () => {
-    const container = createFreshContainer();
+    const container = createFreshContainer(document);
     expect(container.isConnected).toBe(true);
 
     // Simulate Cypress snapshot replay removing it
@@ -291,31 +289,31 @@ describe('MutationObserver resilience (Task 4)', () => {
     expect(container.isConnected).toBe(false);
 
     // Next call should create a fresh container (always does)
-    const fresh = createFreshContainer();
+    const fresh = createFreshContainer(document);
     expect(fresh.isConnected).toBe(true);
     expect(fresh).not.toBe(container);
     expect(document.querySelectorAll('#cypress-api-plugin-container').length).toBe(1);
   });
 
   it('after container removal, next mount creates fresh element', () => {
-    const container1 = createFreshContainer();
+    const container1 = createFreshContainer(document);
     expect(document.body.contains(container1)).toBe(true);
 
     // Remove it (snapshot replay)
     container1.remove();
 
     // Always creates a new container
-    const container2 = createFreshContainer();
+    const container2 = createFreshContainer(document);
     expect(document.body.contains(container2)).toBe(true);
     expect(container2).not.toBe(container1);
     expect(document.body.contains(container1)).toBe(false); // old one is gone
   });
 
   it('every call produces exactly one container in the DOM', () => {
-    createFreshContainer();
-    createFreshContainer();
-    createFreshContainer();
-    const last = createFreshContainer();
+    createFreshContainer(document);
+    createFreshContainer(document);
+    createFreshContainer(document);
+    const last = createFreshContainer(document);
     // Only one container should exist
     const all = document.querySelectorAll('#cypress-api-plugin-container');
     expect(all.length).toBe(1);

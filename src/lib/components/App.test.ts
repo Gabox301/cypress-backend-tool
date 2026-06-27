@@ -1,116 +1,106 @@
-import type { ApiRequest, ApiResponse, DbQueryDisplayData } from '$lib/types';
+import { apiCalls, dbQueries, pluginConfig } from '$lib/stores.svelte';
+import type { ApiCall, DbQuery } from '$lib/types';
 import { render, screen } from '@testing-library/svelte';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import App from './App.svelte';
 
-function makeApiRequest(overrides: Partial<ApiRequest> = {}): ApiRequest {
+function makeApiCall(overrides: Partial<ApiCall> = {}): ApiCall {
   return {
-    url: '/api/test',
-    method: 'GET',
-    headers: { Accept: 'application/json' },
+    id: crypto.randomUUID(),
+    request: {
+      url: '/api/test',
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    },
+    response: {
+      status: 200,
+      statusText: 'OK',
+      headers: { 'Content-Type': 'application/json' },
+      body: { result: 'ok' },
+      duration: 10,
+      size: 100,
+    },
+    timestamp: Date.now(),
+    ...overrides,
+  } as ApiCall;
+}
+
+function makeDbQueryCall(overrides: Partial<DbQuery> = {}): DbQuery {
+  return {
+    id: crypto.randomUUID(),
+    connectionId: 'localhost:5432/test_db',
+    query: 'SELECT * FROM users',
+    result: [{ id: 1, name: 'Alice' }],
+    duration: 5,
+    timestamp: Date.now(),
     ...overrides,
   };
 }
 
-function makeApiResponse(): ApiResponse {
-  return {
-    status: 200,
-    statusText: 'OK',
-    headers: { 'Content-Type': 'application/json' },
-    body: { result: 'ok' },
-    duration: 10,
-    size: 100,
-  };
-}
-
-function makeDbQuery(): DbQueryDisplayData {
-  return {
-    query: 'SELECT * FROM users',
-    rows: [{ id: 1, name: 'Alice' }],
-    rowCount: 1,
-    duration: 5,
-  };
-}
-
-function makeConfig(overrides = {}) {
-  return {
+function setConfig(overrides = {}) {
+  Object.assign(pluginConfig, {
     snapshotOnly: false,
     hideCredentials: false,
     hideCredentialsOptions: { headers: true, auth: true, body: true, query: true },
     requestMode: 'auto' as const,
     CYPRESS_PLUGIN_DEBUG: false,
     ...overrides,
-  };
+  });
 }
 
-// ---------------------------------------------------------------------------
-// 4.4 — App component mount + mode switching + config forwarding
-// ---------------------------------------------------------------------------
-describe('App component — mount and mode', () => {
-  it('renders RequestPanel in API mode', () => {
-    render(App, {
-      props: {
-        request: makeApiRequest(),
-        response: makeApiResponse(),
-        mode: 'api',
-      },
-    });
+beforeEach(() => {
+  apiCalls.length = 0;
+  dbQueries.length = 0;
+  setConfig();
+});
+
+describe('App component — reads from stores', () => {
+  it('renders API calls from apiCalls store', () => {
+    apiCalls.push(makeApiCall());
+    render(App);
 
     expect(screen.getByText('GET')).toBeInTheDocument();
     expect(screen.getByText('200')).toBeInTheDocument();
   });
 
-  it('renders QueryPanel in DB mode', () => {
-    render(App, {
-      props: {
-        dbQuery: makeDbQuery(),
-        mode: 'db',
-      },
-    });
+  it('renders multiple API calls', () => {
+    apiCalls.push(makeApiCall({ request: { url: '/a', method: 'POST' } }));
+    apiCalls.push(makeApiCall({ request: { url: '/b', method: 'PUT' } }));
+    render(App);
 
-    expect(screen.getByText('Database Query')).toBeInTheDocument();
-    expect(screen.getByText('1 rows')).toBeInTheDocument();
-    expect(screen.getByText('5ms')).toBeInTheDocument();
+    expect(screen.getByText('POST')).toBeInTheDocument();
+    expect(screen.getByText('PUT')).toBeInTheDocument();
   });
 
-  it('passes hideCredentials config to RequestPanel and masks auth', () => {
-    const config = makeConfig({ hideCredentials: true });
-    const request = makeApiRequest({
-      auth: { username: 'admin', password: 'secret123' },
-    });
+  it('renders DB queries from dbQueries store', () => {
+    dbQueries.push(makeDbQueryCall());
+    render(App);
 
-    render(App, {
-      props: { request, response: makeApiResponse(), mode: 'api', config },
-    });
+    expect(screen.getByText('SELECT * FROM users')).toBeInTheDocument();
+  });
 
-    // When hideCredentials is true, the password should be masked
-    expect(screen.getByText('GET')).toBeInTheDocument();
+  it('masks credentials when hideCredentials is true', () => {
+    setConfig({ hideCredentials: true });
+    apiCalls.push(
+      makeApiCall({
+        request: { url: '/login', method: 'POST', auth: { username: 'admin', password: 'secret123' } },
+      }),
+    );
+    render(App);
+
+    expect(screen.getByText('POST')).toBeInTheDocument();
     expect(screen.queryByText('secret123')).toBeNull();
   });
 
-  it('shows credentials unmasked when hideCredentials is false', () => {
-    const config = makeConfig({ hideCredentials: false });
-    const request = makeApiRequest({
-      auth: { username: 'admin', password: 'visible123' },
-    });
+  it('shows unmasked credentials when hideCredentials is false', () => {
+    setConfig({ hideCredentials: false });
+    apiCalls.push(
+      makeApiCall({
+        request: { url: '/login', method: 'POST', auth: { username: 'admin', password: 'visible123' } },
+      }),
+    );
+    render(App);
 
-    render(App, {
-      props: { request, response: makeApiResponse(), mode: 'api', config },
-    });
-
-    expect(screen.getByText('GET')).toBeInTheDocument();
-  });
-
-  it('forwards snapshotOnly to ResponsePanel via config', () => {
-    const config = makeConfig({ snapshotOnly: true });
-
-    render(App, {
-      props: { request: makeApiRequest(), response: makeApiResponse(), mode: 'api', config },
-    });
-
-    // snapshotOnly applies collapsed class to the container in showApiUi,
-    // which is called from the plugin layer. At the App level, config
-    // is forwarded correctly — verify the component renders.
-    expect(screen.getByText('200')).toBeInTheDocument();
+    expect(screen.getByText('POST')).toBeInTheDocument();
   });
 });

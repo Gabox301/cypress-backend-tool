@@ -261,30 +261,6 @@ interface DbQueryResponse {
 }
 ```
 
-## Changelog
-
-### 1.0.2
-
-- **Configuración simplificada**: `hideCredentialsOptions` ahora usa booleanos por sección (`headers: true`) en vez de arrays de strings
-- **Auto-init**: `import 'cypress-backend-tool'` registra comandos automáticamente, sin `init()`
-- **Single build**: Un solo archivo `dist/index.js`, sin subcarpetas
-- **ESLint**: Agregado linter con reglas para TypeScript + Svelte 5
-- **Tests unitarios**: 98 tests con vitest + @testing-library/svelte (97% coverage)
-- **Sanitización**: Credenciales de BD ahora usan `cy.task()` exclusivamente, nunca `Cypress.expose()`
-- **`snapshotOnly`**: Colapsa la UI con clase CSS en vez de desmontar componentes
-
-### 1.0.1
-
-- Modernización de Svelte
-
-### 1.0.0
-
-- UI integrada para HTTP requests y PostgreSQL queries
-- Componentes Svelte para la UI
-- Soporte para `cy.http()` y `cy.query()`
-- Sanitización automática de credenciales
-- Compatible con Cypress 15.10.0+
-
 ## Licencia
 
 MIT

@@ -7,9 +7,9 @@
 // ============================================
 
 import { getPluginConfig } from '$lib/config';
-import { addApiCall, addDbQuery } from '$lib/stores.svelte';
-import type { ApiCall, ApiResponse, CypressApiPluginConfig, DbQuery, DbQueryDisplayData } from '$lib/types';
-import { mountApiUI, mountDbQueryUI } from '$lib/ui';
+import { addApiCall, addDbQuery, pluginConfig } from '$lib/stores.svelte';
+import type { ApiCall, ApiResponse, CypressApiPluginConfig, DbQuery } from '$lib/types';
+import { ensurePluginMounted } from '$lib/ui';
 
 // ============================================
 // Cypress namespace augmentations
@@ -103,16 +103,51 @@ function logDebug(...args: unknown[]) {
 }
 
 function readPluginConfig(): CypressApiPluginConfig {
-  return getPluginConfig((key: string) => Cypress.expose(key));
+  const config = getPluginConfig((key: string) => Cypress.expose(key));
+  // Sync straight into the reactive store that App.svelte reads from.
+  // No need to thread config through component props on every call anymore
+  // — the store is shared between this file and App.svelte.
+  Object.assign(pluginConfig, config);
+  return config;
 }
 
 // ============================================
-// UI container — NEW container every call (Vue plugin pattern)
-// Svelte component instances are NOT reused — each call gets a fresh mount.
-// State survives in window.__cypress_backend_tool__[testId]
+// ONE persistent container per live document — created once, NEVER
+// cleared. Every call is appended as its own entry by App.svelte (keyed by
+// that call's own stable `id`), so a Cypress.log().snapshot() taken for
+// call #1 keeps pointing at call #1's element even after calls #2, #3, ...
+// happen. Reusing-and-clearing a single shared element (the previous
+// approach) is exactly what broke snapshot viewing.
+//
+// Re-creation happens automatically: if the AUT document was reloaded
+// (Cypress resetting the page before a new test, or a real cy.visit()),
+// the old container no longer exists in the new document, so
+// getElementById returns null and we create + (re)mount fresh.
 // ============================================
 
-// Per-test storage — scoped by Cypress test ID so data survives between it() blocks
+function getOrCreateContainer(doc: Document): HTMLElement {
+  let container = doc.getElementById('cypress-api-plugin-container') as HTMLElement | null;
+  if (!container) {
+    container = doc.createElement('div');
+    container.id = 'cypress-api-plugin-container';
+    doc.body.appendChild(container);
+  }
+  ensurePluginMounted(container, doc);
+  return container;
+}
+
+function applySnapshotOnly(container: HTMLElement, config: CypressApiPluginConfig) {
+  container.classList.toggle('cypress-plugin-collapsed', config.snapshotOnly);
+}
+
+function scrollToEntry(doc: Document, id: string) {
+  doc.getElementById(id)?.scrollIntoView({ block: 'end' });
+}
+
+// Per-test storage — scoped by Cypress test ID. Kept for tests that read
+// this directly (e.g. custom assertions on the raw call/query history); the
+// plugin UI itself no longer depends on it, it reads the shared
+// apiCalls/dbQueries stores instead.
 declare global {
   interface Window {
     __cypress_backend_tool__?: Record<string, { apiCalls: ApiCall[]; dbQueries: DbQuery[] }>;
@@ -131,77 +166,63 @@ function getTestStore() {
   return win.__cypress_backend_tool__[testId];
 }
 
-function createFreshContainer(): HTMLElement {
-  const win = cy.state('window') as Window;
-  const doc = win.document;
+// Exported for unit testing (kept under the old name to avoid churn in any
+// existing tests that import it).
+export { getOrCreateContainer as createFreshContainer };
 
-  let container = doc.getElementById('cypress-api-plugin-container') as HTMLElement | null;
-  if (container) {
-    container.innerHTML = '';
-    return container;
-  }
-
-  container = doc.createElement('div');
-  container.id = 'cypress-api-plugin-container';
-  doc.body.appendChild(container);
-  return container;
-}
-
-// Exported for unit testing
-export { createFreshContainer };
-
-function showApiUi(index: number): void {
-  const store = getTestStore();
-  const call = store.apiCalls[index];
-  if (!call?.response) return;
+function showApiUi(call: ApiCall): Cypress.Chainable<ApiResponse> {
+  if (!call.response) return cy.wrap(null) as unknown as Cypress.Chainable<ApiResponse>;
 
   const config = readPluginConfig();
+  const win = cy.state('window') as Window;
+  const doc = win.document;
 
   const log = Cypress.log({
     name: call.request.method,
     autoEnd: false,
     message: `${call.request.method} ${call.request.url}`,
     consoleProps: () => ({ request: call.request, response: call.response }),
-  }).snapshot('request');
+  });
 
-  const container = createFreshContainer();
+  const container = getOrCreateContainer(doc);
+  applySnapshotOnly(container, config);
 
-  if (config.snapshotOnly) {
-    container.classList.add('cypress-plugin-collapsed');
-  }
-
-  mountApiUI(container, call.request, call.response, config);
-
-  // Svelte 5 mount() is synchronous — DOM is ready
-  const $el = Cypress.$('#cypress-api-plugin-container');
-  log.set({ $el }).snapshot('response').end();
-
-  logDebug('API UI mounted (index:', index, ')');
+  return cy.window({ log: false }).then(() => {
+    const elementId = `cabt-entry-${call.id}`;
+    scrollToEntry(doc, elementId);
+    const $el = Cypress.$(`#${elementId}`, { log: false });
+    log.set({ $el }).snapshot('response').end();
+    return call.response!;
+  });
 }
 
-function showDbQueryUi(index: number): void {
-  const store = getTestStore();
-  const query = store.dbQueries[index];
-  if (!query) return;
-
+function showDbQueryUi(query: DbQuery): void {
   const config = readPluginConfig();
-  const container = createFreshContainer();
+  const win = cy.state('window') as Window;
+  const doc = win.document;
 
-  if (config.snapshotOnly) {
-    container.classList.add('cypress-plugin-collapsed');
-  }
+  // Previously, DB queries had no Cypress.log() entry at all — there was
+  // nothing in the command log to click on to inspect a query's snapshot.
+  // This gives every cy.query() call its own logged, snapshot-able entry,
+  // exactly like cy.http() already has.
+  const log = Cypress.log({
+    name: 'QUERY',
+    autoEnd: false,
+    message: query.query,
+    consoleProps: () => ({ query: query.query, result: query.result, duration: query.duration, error: query.error }),
+  });
 
-  const dbData: DbQueryDisplayData = {
-    query: query.query,
-    rows: (query.result as unknown[]) ?? [],
-    rowCount: Array.isArray(query.result) ? query.result.length : 0,
-    duration: query.duration,
-    error: query.error,
-  };
+  const container = getOrCreateContainer(doc);
+  applySnapshotOnly(container, config);
 
-  mountDbQueryUI(container, dbData, config);
+  cy.window({ log: false }).then(() => {
+    const elementId = `cabt-entry-${query.id}`;
+    scrollToEntry(doc, elementId);
+    const $el = Cypress.$(`#${elementId}`, { log: false });
+    log.set({ $el }).snapshot('response').end();
+  });
 
-  logDebug('DB Query UI mounted (index:', index, ')');
+  logDebug('DB Query UI rendered (id:', query.id, ')');
 }
 
 // ============================================
@@ -244,10 +265,8 @@ Cypress.Commands.add(
       };
 
       addApiCall(call);
-      const store = getTestStore();
-      store.apiCalls.push(call);
-      showApiUi(store.apiCalls.length - 1);
-      return response;
+      getTestStore().apiCalls.push(call);
+      return showApiUi(call);
     });
   },
 );
@@ -280,10 +299,22 @@ Cypress.Commands.add('query', (query: string, connectionOptions?: DbConnectionOp
       };
 
       addDbQuery(dbCall);
-      const store = getTestStore();
-      store.dbQueries.push(dbCall);
-      showDbQueryUi(store.dbQueries.length - 1);
+      getTestStore().dbQueries.push(dbCall);
+      showDbQueryUi(dbCall);
       return cy.wrap(dbResponse);
     });
+  });
+});
+
+// ============================================
+// Auto-reconnect: Cypress destroys the AUT DOM during snapshot replay.
+// Watch for container removal and re-create on next beforeEach.
+// ============================================
+
+beforeEach(() => {
+  cy.document({ log: false }).then((doc) => {
+    if (!doc.getElementById('cypress-api-plugin-container')) {
+      getOrCreateContainer(doc);
+    }
   });
 });
