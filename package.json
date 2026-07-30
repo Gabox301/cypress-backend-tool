@@ -1,6 +1,6 @@
 {
   "name": "cypress-backend-tool",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "author": "Gabriel Ortega <https://github.com/Gabox301>",
   "description": "Cypress plugin for API testing and PostgreSQL queries with UI interface",
   "license": "MIT",
@@ -23,12 +23,15 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./tasks": {
       "types": "./dist/tasks.d.ts",
-      "import": "./dist/tasks.js"
-    }
+      "import": "./dist/tasks.js",
+      "default": "./dist/tasks.js"
+    },
+    "./package.json": "./package.json"
   },
   "type": "module",
   "files": [
