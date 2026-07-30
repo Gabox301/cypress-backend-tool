@@ -1,6 +1,6 @@
 {
   "name": "cypress-backend-tool",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "author": "Gabriel Ortega <https://github.com/Gabox301>",
   "description": "Cypress plugin for API testing and PostgreSQL queries with UI interface",
   "license": "MIT",
@@ -37,29 +37,29 @@
   "dependencies": {
     "pg": "^8.22.0",
     "prismjs": "^1.30.0",
-    "set-cookie-parser": "^3.1.1"
+    "set-cookie-parser": "^3.1.2"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@sveltejs/vite-plugin-svelte": "^7.1.2",
-    "@testing-library/jest-dom": "^6.9.1",
+    "@sveltejs/vite-plugin-svelte": "^7.2.0",
+    "@testing-library/jest-dom": "^7.0.0",
     "@testing-library/svelte": "^5.4.2",
     "@testing-library/user-event": "^14.6.1",
-    "@types/node": "^26.0.1",
+    "@types/node": "^26.1.2",
     "@types/pg": "^8.20.0",
-    "@vitest/coverage-v8": "^4.1.9",
-    "cypress": "^15.18.0",
-    "eslint": "^10.6.0",
-    "eslint-plugin-svelte": "^3.20.0",
-    "globals": "^17.7.0",
-    "jsdom": "^29.1.1",
-    "svelte": "^5.56.4",
+    "@vitest/coverage-v8": "^4.1.10",
+    "cypress": "^15.19.0",
+    "eslint": "^10.8.0",
+    "eslint-plugin-svelte": "^3.22.0",
+    "globals": "^17.8.0",
+    "jsdom": "^30.0.1",
+    "svelte": "^5.56.8",
     "svelte-eslint-parser": "^1.8.0",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.62.0",
-    "vite": "^8.1.0",
+    "typescript-eslint": "^8.65.0",
+    "vite": "^8.2.0",
     "vite-plugin-dts": "^5.0.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.10"
   },
   "peerDependencies": {
     "cypress": ">=15.10.0"

@@ -17,15 +17,34 @@
   });
   let lines = $derived(formattedData.split('\n'));
 
-  // @html is safe here: input is always JSON.stringify() output or plain strings.
-  // User-provided data is sanitized by JSON.stringify which escapes HTML entities.
-  function colorize(line: string): string {
-    return line
-      .replace(/("[^"]+")(?=\s*:)/g, '<span class="json-key">$1</span>')
-      .replace(/:\s*("[^"]*")/g, ': <span class="json-string">$1</span>')
-      .replace(/:\s*(\d+\.?\d*)/g, ': <span class="json-number">$1</span>')
-      .replace(/:\s*(true|false)/g, ': <span class="json-bool">$1</span>')
-      .replace(/:\s*(null)/g, ': <span class="json-null">$1</span>');
+  interface Token {
+    text: string;
+    class?: string;
+  }
+
+  /** Breaks a JSON line into classified tokens for safe <span>-based rendering.
+   *  Never generates raw HTML — returns structured tokens instead. */
+  function tokenize(line: string): Token[] {
+    const tokens: Token[] = [];
+    const re = /("[^"]+")(?=\s*:)|:\s*("[^"]*")|:\s*(\d+\.?\d*)|:\s*(true|false)|:\s*(null)/g;
+    let lastIndex = 0;
+    let m: RegExpExecArray | null;
+
+    while ((m = re.exec(line)) !== null) {
+      if (m.index > lastIndex) {
+        tokens.push({ text: line.slice(lastIndex, m.index) });
+      }
+      if (m[1] !== undefined) tokens.push({ text: m[1], class: 'json-key' });
+      else if (m[2] !== undefined) tokens.push({ text: m[2], class: 'json-string' });
+      else if (m[3] !== undefined) tokens.push({ text: m[3], class: 'json-number' });
+      else if (m[4] !== undefined) tokens.push({ text: m[4], class: 'json-bool' });
+      else if (m[5] !== undefined) tokens.push({ text: m[5], class: 'json-null' });
+      lastIndex = re.lastIndex;
+    }
+    if (lastIndex < line.length) {
+      tokens.push({ text: line.slice(lastIndex) });
+    }
+    return tokens;
   }
 
   async function copyToClipboard() {
@@ -57,7 +76,10 @@
         </div>
         <div class="code-content">
           {#each lines as line, i (i)}
-            <div class="code-line"><pre>{@html colorize(line)}</pre></div>
+            <div class="code-line">
+              <pre>{#each tokenize(line) as token, j (j)}{#if token.class}<span class={token.class}>{token.text}</span
+                    >{:else}{token.text}{/if}{/each}</pre>
+            </div>
           {/each}
         </div>
       </div>

@@ -7,7 +7,7 @@
 // ============================================
 
 import { getPluginConfig } from '$lib/config';
-import { addApiCall, addDbQuery, pluginConfig } from '$lib/stores.svelte';
+import { addApiCall, addDbQuery, clearApiCalls, clearDbQueries, pluginConfig } from '$lib/stores.svelte';
 import type { ApiCall, ApiResponse, CypressApiPluginConfig, DbQuery } from '$lib/types';
 import { ensurePluginMounted } from '$lib/ui';
 
@@ -312,6 +312,13 @@ Cypress.Commands.add('query', (query: string, connectionOptions?: DbConnectionOp
 // ============================================
 
 beforeEach(() => {
+  // Clear accumulated data from previous test — Cypress does NOT reload
+  // the AUT page between tests (default testIsolation), so module-level
+  // stores persist across tests. Without this, every test inherits all
+  // cy.http()/cy.query() calls from every previous test in the spec.
+  clearApiCalls();
+  clearDbQueries();
+
   cy.document({ log: false }).then((doc) => {
     if (!doc.getElementById('cypress-api-plugin-container')) {
       getOrCreateContainer(doc);
