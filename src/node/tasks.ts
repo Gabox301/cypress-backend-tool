@@ -62,25 +62,32 @@ export interface DbTaskOptions {
 export function setupDatabaseTasks(on: Cypress.PluginEvents, options?: DbTaskOptions): void {
   const prefix = options?.defaultPrefix ?? '';
   const envPrefix = options?.envPrefix ?? 'CYPRESS_DB_';
-
-  const readEnv = (key: string): string | undefined => {
+  const readEnv = (key: string): string => {
     const fromDefaults = options?.defaults?.[key.toLowerCase() as keyof DbTaskConfig];
     return (
       process.env[envPrefix + key] ??
       process.env['DB_' + key] ??
-      (fromDefaults != null ? String(fromDefaults) : undefined)
+      (fromDefaults != null ? String(fromDefaults) : undefined) ??
+      { host: 'localhost', port: '5432', name: 'test_db', user: 'postgres', password: '' }[key.toLowerCase()] ??
+      ''
     );
   };
-
-  const pool = new pg.Pool({ max: 1 });
+  const pool = new pg.Pool({
+    max: 1,
+    host: readEnv('HOST'),
+    port: parseInt(readEnv('PORT'), 10),
+    database: readEnv('NAME'),
+    user: readEnv('USER'),
+    password: readEnv('PASSWORD'),
+  });
 
   on('task', {
     [`${prefix}db:getConfig`]: (): DbTaskConfig => ({
-      host: readEnv('HOST') || 'localhost',
-      port: parseInt(readEnv('PORT') || '5432', 10),
-      database: readEnv('NAME') || 'test_db',
-      user: readEnv('USER') || 'postgres',
-      password: readEnv('PASSWORD') || '',
+      host: readEnv('HOST'),
+      port: parseInt(readEnv('PORT'), 10),
+      database: readEnv('NAME'),
+      user: readEnv('USER'),
+      password: readEnv('PASSWORD'),
     }),
 
     [`${prefix}db:query`]: async (args: {
@@ -91,6 +98,26 @@ export function setupDatabaseTasks(on: Cypress.PluginEvents, options?: DbTaskOpt
       user: string;
       password: string;
     }): Promise<DbTaskResult> => {
+      const poolOpts = pool.options;
+      if (
+        args.host !== poolOpts.host ||
+        args.port !== poolOpts.port ||
+        args.database !== poolOpts.database ||
+        args.user !== poolOpts.user ||
+        args.password !== poolOpts.password
+      ) {
+        const client = new pg.Client({
+          host: args.host,
+          port: args.port,
+          database: args.database,
+          user: args.user,
+          password: args.password,
+        });
+        await client.connect();
+        const result = await client.query(args.query);
+        await client.end();
+        return { rows: result.rows, rowCount: result.rowCount ?? 0 };
+      }
       const result = await pool.query(args.query);
       return { rows: result.rows, rowCount: result.rowCount ?? 0 };
     },

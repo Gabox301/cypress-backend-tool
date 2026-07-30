@@ -15,15 +15,25 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  */
 let mockPoolQuery: ReturnType<typeof vi.fn>;
 let mockPoolCtor: ReturnType<typeof vi.fn>;
+let mockClientQuery: ReturnType<typeof vi.fn>;
+let mockClientConnect: ReturnType<typeof vi.fn>;
+let mockClientEnd: ReturnType<typeof vi.fn>;
 
 vi.mock('pg', () => {
   mockPoolQuery = vi.fn();
-  mockPoolCtor = vi.fn(function MockPool(_opts?: Record<string, unknown>) {
-    return { query: mockPoolQuery } as never;
+  mockClientQuery = vi.fn();
+  mockClientConnect = vi.fn();
+  mockClientEnd = vi.fn();
+  mockPoolCtor = vi.fn(function MockPool(opts?: Record<string, unknown>) {
+    return { query: mockPoolQuery, options: opts } as never;
+  });
+  const MockClient = vi.fn(function MockClient() {
+    return { query: mockClientQuery, connect: mockClientConnect, end: mockClientEnd } as never;
   });
   return {
-    default: { Pool: mockPoolCtor as unknown as new (...args: unknown[]) => { query: typeof mockPoolQuery } },
-    Pool: mockPoolCtor as unknown as new (...args: unknown[]) => { query: typeof mockPoolQuery },
+    default: { Pool: mockPoolCtor as unknown, Client: MockClient as unknown },
+    Pool: mockPoolCtor as unknown,
+    Client: MockClient as unknown,
   };
 });
 
@@ -140,22 +150,38 @@ describe('setupDatabaseTasks', () => {
   // Persistent Pool reuse
   // -----------------------------------------------------------------------
 
-  it('creates a pg.Pool with max: 1', async () => {
+  it('creates a pg.Pool with connection config from env vars', async () => {
+    vi.stubEnv('CYPRESS_DB_HOST', 'mydb.example.com');
+    vi.stubEnv('CYPRESS_DB_PORT', '5555');
+    vi.stubEnv('CYPRESS_DB_NAME', 'myapp');
+    vi.stubEnv('CYPRESS_DB_USER', 'app_user');
+    vi.stubEnv('CYPRESS_DB_PASSWORD', 's3cret');
+
     const on = vi.fn();
     setupDatabaseTasks(on as unknown as Record<string, unknown>);
 
-    mockPoolQuery.mockResolvedValue({ rows: [], rowCount: 0 });
-    const queryHandler = getTasks(on)['db:query'] as (args: Record<string, unknown>) => Promise<unknown>;
-    await queryHandler({
-      query: 'SELECT 1',
+    expect(mockPoolCtor).toHaveBeenCalledWith({
+      max: 1,
+      host: 'mydb.example.com',
+      port: 5555,
+      database: 'myapp',
+      user: 'app_user',
+      password: 's3cret',
+    });
+  });
+
+  it('pool uses built-in defaults when no env vars are set', () => {
+    const on = vi.fn();
+    setupDatabaseTasks(on as unknown as Record<string, unknown>);
+
+    expect(mockPoolCtor).toHaveBeenCalledWith({
+      max: 1,
       host: 'localhost',
       port: 5432,
-      database: 'test',
+      database: 'test_db',
       user: 'postgres',
       password: '',
     });
-
-    expect(mockPoolCtor).toHaveBeenCalledWith({ max: 1 });
   });
 
   it('reuses the same pool across multiple task handler invocations', async () => {
@@ -165,11 +191,12 @@ describe('setupDatabaseTasks', () => {
     mockPoolQuery.mockResolvedValue({ rows: [{ col: 1 }], rowCount: 1 });
 
     const queryHandler = getTasks(on)['db:query'] as (args: Record<string, unknown>) => Promise<unknown>;
+    // args match pool defaults (test_db), so pool.query is used
     await queryHandler({
       query: 'SELECT 1',
       host: 'localhost',
       port: 5432,
-      database: 'test',
+      database: 'test_db',
       user: 'postgres',
       password: '',
     });
@@ -177,7 +204,7 @@ describe('setupDatabaseTasks', () => {
       query: 'SELECT 2',
       host: 'localhost',
       port: 5432,
-      database: 'test',
+      database: 'test_db',
       user: 'postgres',
       password: '',
     });
@@ -189,7 +216,7 @@ describe('setupDatabaseTasks', () => {
   // db:query — delegates to pool.query
   // -----------------------------------------------------------------------
 
-  it('db:query calls pool.query with the given SQL', async () => {
+  it('db:query calls pool.query with the given SQL when args match pool config', async () => {
     const on = vi.fn();
     setupDatabaseTasks(on as unknown as Record<string, unknown>);
 
@@ -199,13 +226,38 @@ describe('setupDatabaseTasks', () => {
       query: 'SELECT 1 AS result',
       host: 'localhost',
       port: 5432,
-      database: 'test',
+      database: 'test_db',
       user: 'postgres',
       password: '',
     });
 
     expect(mockPoolQuery).toHaveBeenCalledWith('SELECT 1 AS result');
     expect(result).toEqual({ rows: [{ result: 1 }], rowCount: 1 });
+  });
+
+  it('uses a one-off pg.Client when db:query args differ from pool config', async () => {
+    vi.stubEnv('CYPRESS_DB_HOST', 'pool-host');
+
+    const on = vi.fn();
+    setupDatabaseTasks(on as unknown as Record<string, unknown>);
+
+    mockClientQuery.mockResolvedValue({ rows: [{ val: 'override' }], rowCount: 1 });
+
+    // args use a different host than the pool (pool-host vs some-other-host)
+    const result = await (getTasks(on)['db:query'] as (args: Record<string, unknown>) => Promise<unknown>)({
+      query: 'SELECT $1 AS val',
+      host: 'some-other-host',
+      port: 5432,
+      database: 'test_db',
+      user: 'postgres',
+      password: '',
+    });
+
+    expect(mockClientConnect).toHaveBeenCalledOnce();
+    expect(mockClientQuery).toHaveBeenCalledWith('SELECT $1 AS val');
+    expect(mockClientEnd).toHaveBeenCalledOnce();
+    expect(mockPoolQuery).not.toHaveBeenCalled();
+    expect(result).toEqual({ rows: [{ val: 'override' }], rowCount: 1 });
   });
 
   // -----------------------------------------------------------------------
