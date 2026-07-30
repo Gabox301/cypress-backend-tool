@@ -71,6 +71,21 @@ beforeEach(() => {
     if (key === 'requestMode') return 'auto';
     return undefined;
   });
+  // Polyfill scrollIntoView for jsdom (used by showApiUi/scrollToEntry)
+  if (!Element.prototype.scrollIntoView) {
+    Element.prototype.scrollIntoView = vi.fn();
+  }
+
+  // cy.request mock (needed for http handler tests)
+  const originalCy = globalThis.cy as unknown as Record<string, unknown>;
+  originalCy.request = vi.fn().mockResolvedValue({
+    status: 200,
+    body: { ok: true },
+    headers: { 'content-type': 'application/json' },
+    statusText: 'OK',
+  });
+  originalCy.window = vi.fn((_opts?: { log: boolean }) => Promise.resolve(window));
+  originalCy.wrap = vi.fn(<T>(val: T) => ({ then: (cb: (v: T) => unknown) => cb(val) }) as Cypress.Chainable<T>);
 });
 
 afterEach(() => {
@@ -318,5 +333,54 @@ describe('MutationObserver resilience (Task 4)', () => {
     const all = document.querySelectorAll('#cypress-api-plugin-container');
     expect(all.length).toBe(1);
     expect(all[0]).toBe(last);
+  });
+});
+
+// ===========================================================================
+// Task 5 — Empty response body bug fix (TDD Phase 1)
+// ===========================================================================
+
+describe('empty response body handling (Task 5)', () => {
+  beforeAll(async () => {
+    // Ensure the module is loaded so commands are captured
+    await import('./index');
+  });
+
+  it('RED: returns size: 0 when cy.request returns body: undefined (204 No Content)', async () => {
+    // Arrange: mock cy.request to return a 204 with undefined body
+    const mockRequest = vi.fn().mockResolvedValue({
+      status: 204,
+      body: undefined,
+      headers: {},
+      statusText: 'No Content',
+    });
+    (globalThis.cy as unknown as Record<string, unknown>).request = mockRequest;
+
+    // Act: call the real http handler captured during module import
+    const httpHandler = capturedCommands['http'] as (...args: unknown[]) => Promise<Record<string, unknown>>;
+    const result = await httpHandler({ url: 'https://api.example.com/no-content', method: 'GET' });
+
+    // Assert: size must be 0 (not crash from JSON.stringify(undefined).length)
+    expect(result).toBeDefined();
+    expect(result.size).toBe(0);
+  });
+
+  it('still computes size correctly when body is present', async () => {
+    // Arrange: mock cy.request with a normal response
+    const mockRequest = vi.fn().mockResolvedValue({
+      status: 200,
+      body: { id: 1, name: 'test' },
+      headers: { 'content-type': 'application/json' },
+      statusText: 'OK',
+    });
+    (globalThis.cy as unknown as Record<string, unknown>).request = mockRequest;
+
+    // Act
+    const httpHandler = capturedCommands['http'] as (...args: unknown[]) => Promise<Record<string, unknown>>;
+    const result = await httpHandler({ url: 'https://api.example.com/data', method: 'GET' });
+
+    // Assert: size should be JSON.stringify(body).length = 22
+    expect(result).toBeDefined();
+    expect(result.size).toBe(22);
   });
 });

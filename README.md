@@ -46,9 +46,44 @@ import 'cypress-backend-tool'; // Auto-init: registra cy.http() y cy.query()
 
 Sin `init()`, sin configuración adicional. El plugin se auto-inicializa al importarlo.
 
-### 2. Configurar cypress.config.ts — Expose + Tasks
+### 2. Configurar cypress.config.ts — setupDatabaseTasks() (recomendado)
 
-Las opciones del plugin se configuran via `expose`. Si usás `cy.query()`, necesás registrar los tasks de base de datos en `setupNodeEvents`:
+La forma más simple de configurar las tareas de base de datos es con `setupDatabaseTasks()`, que registra automáticamente `db:getConfig` y `db:query` con un Pool persistente:
+
+```typescript
+// cypress.config.ts
+import { defineConfig } from 'cypress';
+import { setupDatabaseTasks } from 'cypress-backend-tool/tasks';
+
+export default defineConfig({
+  e2e: {
+    setupNodeEvents(on) {
+      setupDatabaseTasks(on);
+      // No necesitás return config a menos que modifiques config
+    },
+    expose: {
+      snapshotOnly: false,
+      hideCredentials: true,
+      hideCredentialsOptions: {
+        headers: true,
+        auth: true,
+        body: true,
+        query: true,
+      },
+      requestMode: 'auto',
+      CYPRESS_PLUGIN_DEBUG: false,
+    },
+  },
+});
+```
+
+Las credenciales se configuran via variables de entorno (ver [Variables de entorno](#variables-de-entorno)).
+
+> 💡 **Solo HTTP**: si solo usás `cy.http()`, no necesás `setupNodeEvents` — el plugin funciona sin configuración del lado Node.
+
+### 2b. Configuración manual (alternativa)
+
+Si preferís manejar las tareas manualmente:
 
 ```typescript
 // cypress.config.ts
@@ -75,53 +110,73 @@ export default defineConfig({
       });
       return config;
     },
-    expose: {
-      snapshotOnly: false, // Colapsa la UI tras cada comando
-      hideCredentials: true, // Oculta contraseñas/tokens en la UI
-      hideCredentialsOptions: {
-        // Control granular por tab
-        headers: true,
-        auth: true,
-        body: true,
-        query: true,
-      },
-      requestMode: 'auto', // 'auto' o 'manual'
-      CYPRESS_PLUGIN_DEBUG: false, // Logs de diagnóstico
-    },
+    expose: { ... },
   },
 });
 ```
 
-> 💡 **Solo HTTP**: si solo usás `cy.http()`, no necesás `setupNodeEvents` — el plugin funciona sin configuración del lado Node.
+### 3. Variables de entorno
 
-### 3. Credenciales de base de datos
+Las credenciales de base de datos se resuelven en este orden (mayor prioridad primero):
 
-Usa `cy.env()` (moderno, seguro) en vez de `Cypress.env()` (deprecado):
+| Prioridad | Prefijo         | Ejemplo                     |
+|-----------|-----------------|-----------------------------|
+| 1 (máx)  | `CYPRESS_DB_`   | `CYPRESS_DB_HOST=localhost` |
+| 2         | `DB_`           | `DB_HOST=localhost`         |
+| 3         | defaults (code) | `host: 'localhost'`         |
+
+```env
+# Prefijo recomendado (menos propenso a colisiones)
+CYPRESS_DB_HOST=localhost
+CYPRESS_DB_PORT=5432
+CYPRESS_DB_NAME=mi_base
+CYPRESS_DB_USER=postgres
+CYPRESS_DB_PASSWORD=secreto
+
+# Fallback — solo si CYPRESS_DB_* no está definido
+DB_HOST=localhost
+DB_PORT=5432
+```
+
+También podés usar `cy.env()` desde `cypress.config.ts`:
 
 ```typescript
-// cypress.config.ts
 export default defineConfig({
   e2e: {
     env: {
       dbHost: 'localhost',
       dbPort: '5432',
-      dbName: 'tu_base_de_datos',
-      dbUser: 'tu_usuario',
-      dbPassword: 'tu_password',
+      dbName: 'mi_base',
+      dbUser: 'postgres',
+      dbPassword: 'secreto',
     },
   },
 });
 ```
 
-O desde un archivo `.env`:
+### setupDatabaseTasks() — Opciones
 
-```env
-CYPRESS_DB_HOST=localhost
-CYPRESS_DB_PORT=5432
-CYPRESS_DB_NAME=tu_base_de_datos
-CYPRESS_DB_USER=tu_usuario
-CYPRESS_DB_PASSWORD=tu_password
+```typescript
+import { setupDatabaseTasks } from 'cypress-backend-tool/tasks';
+
+setupDatabaseTasks(on, {
+  defaultPrefix: 'myapp_',   // tareas → myapp_db:getConfig, myapp_db:query
+  envPrefix: 'MY_DB_',       // lee MY_DB_HOST en vez de CYPRESS_DB_HOST
+  defaults: {
+    host: 'localhost',
+    port: 5432,
+    database: 'test_db',
+    user: 'postgres',
+    password: '',
+  },
+});
 ```
+
+| Opción         | Tipo       | Default          | Descripción                                    |
+|----------------|------------|------------------|------------------------------------------------|
+| `defaultPrefix`| `string`   | `''`             | Prefijo para los nombres de tarea registrados |
+| `envPrefix`    | `string`   | `'CYPRESS_DB_'`  | Prefijo de variables de entorno a leer         |
+| `defaults`     | `object`   | —                | Valores fallback cuando no hay env vars        |
 
 ## Uso
 
@@ -212,6 +267,39 @@ export default defineConfig({
 | `hideCredentialsOptions` | `{headers,auth,body,query: boolean}` | Todas `true` | Control granular por sección        |
 | `requestMode`            | `'auto' \| 'manual'`                 | `'auto'`     | Muestra UI automáticamente o no     |
 | `CYPRESS_PLUGIN_DEBUG`   | `boolean`                            | `false`      | Logs de diagnóstico                 |
+
+### configure() — Override programático
+
+Como alternativa a `Cypress.expose()`, podés usar `configure()` desde cualquier lugar donde tengas acceso al bundle del browser (e.g., `setupNodeEvents`, hooks de test, o directamente en el spec):
+
+```typescript
+import { configure } from 'cypress-backend-tool';
+
+// En setupNodeEvents o beforeEach:
+configure({ snapshotOnly: true });
+
+// Los valores de configure() tienen prioridad sobre Cypress.expose()
+configure({
+  hideCredentialsOptions: {
+    headers: false, // Solo deshabilitar headers, el resto se conserva
+  },
+});
+```
+
+**Orden de merge** (mayor prioridad gana):
+
+1. `Cypress.expose()` — valores base desde `cypress.config.ts`
+2. `configure()` — overrides programáticos
+
+`hideCredentialsOptions` hace un merge profundo: si solo pasás `{ headers: false }`, las opciones `auth`, `body`, y `query` se conservan de `Cypress.expose()`. No necesitás repetir todas las opciones.
+
+### Tabla de API pública
+
+| Export                        | Origen              | Descripción                                      |
+|-------------------------------|---------------------|--------------------------------------------------|
+| `import 'cypress-backend-tool'` | `index.js`        | Auto-init: registra `cy.http()` y `cy.query()`   |
+| `{ configure }`               | `index.js`         | Override programático de config del plugin       |
+| `{ setupDatabaseTasks }`      | `tasks.js`         | Helper para tareas DB con Pool persistente       |
 
 ## Persistencia de UI
 

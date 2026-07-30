@@ -6,7 +6,7 @@
 // Replaces cypress/support/plugin/index.ts
 // ============================================
 
-import { getPluginConfig } from '$lib/config';
+import { configure, getConfigOverrides, getPluginConfig, mergeConfig } from '$lib/config';
 import { addApiCall, addDbQuery, clearApiCalls, clearDbQueries, pluginConfig } from '$lib/stores.svelte';
 import type { ApiCall, ApiResponse, CypressApiPluginConfig, DbQuery } from '$lib/types';
 import { ensurePluginMounted } from '$lib/ui';
@@ -103,7 +103,8 @@ function logDebug(...args: unknown[]) {
 }
 
 function readPluginConfig(): CypressApiPluginConfig {
-  const config = getPluginConfig((key: string) => Cypress.expose(key));
+  const base = getPluginConfig((key: string) => Cypress.expose(key));
+  const config = mergeConfig(base, getConfigOverrides());
   // Sync straight into the reactive store that App.svelte reads from.
   // No need to thread config through component props on every call anymore
   // — the store is shared between this file and App.svelte.
@@ -169,6 +170,9 @@ function getTestStore() {
 // Exported for unit testing (kept under the old name to avoid churn in any
 // existing tests that import it).
 export { getOrCreateContainer as createFreshContainer };
+
+// Re-exported public API
+export { configure };
 
 function showApiUi(call: ApiCall): Cypress.Chainable<ApiResponse> {
   if (!call.response) return cy.wrap(null) as unknown as Cypress.Chainable<ApiResponse>;
@@ -246,7 +250,7 @@ Cypress.Commands.add(
         headers: (cyResponse.headers || {}) as Record<string, string>,
         body: cyResponse.body,
         duration: Date.now() - startTime,
-        size: JSON.stringify(cyResponse.body).length,
+        size: cyResponse.body ? JSON.stringify(cyResponse.body).length : 0,
         cookies: (cyResponse as { cookies?: ApiResponse['cookies'] }).cookies || [],
       };
 

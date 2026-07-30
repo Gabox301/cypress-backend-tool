@@ -22,14 +22,19 @@ export default defineConfig({
   ],
   build: {
     lib: {
-      entry: resolve(import.meta.dirname, 'src/index.ts'),
+      entry: [resolve(import.meta.dirname, 'src/index.ts'), resolve(import.meta.dirname, 'src/node/tasks.ts')],
       formats: ['es'],
-      fileName: () => 'index.js',
+      fileName: (_format: string, entryName: string) => `${entryName === 'index' ? 'index' : 'tasks'}.js`,
     },
     outDir: 'dist',
     emptyOutDir: true,
     rollupOptions: {
-      external: ['cypress'],
+      external: (source: string, importer: string | undefined) => {
+        if (source === 'cypress') return true;
+        // Only externalize 'pg' when imported from the tasks entry
+        if (source === 'pg' && importer?.includes('src/node/tasks.ts')) return true;
+        return false;
+      },
       output: {
         assetFileNames: 'index.[ext]',
       },
