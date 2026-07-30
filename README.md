@@ -16,9 +16,10 @@ Plugin de Cypress para testing de APIs HTTP y consultas a bases de datos Postgre
 
 ## Características
 
-- **UI integrada**: Panel visual para ver requests y respuestas HTTP
-- **Soporte PostgreSQL**: Ejecuta queries SQL directamente desde Cypress
-- **Sanitización de credenciales**: Oculta datos sensibles en la UI automáticamente
+- **UI persistente**: Cada request/query tiene su propia entrada permanente en el DOM. Los snapshots de Cypress son estables entre `it()` blocks — nunca verás un panel en blanco al inspeccionar una llamada anterior.
+- **Soporte PostgreSQL**: Ejecuta queries SQL directamente desde Cypress sin exponer credenciales al browser.
+- **Sanitización de credenciales**: Oculta datos sensibles (passwords, tokens, API keys) en la UI automáticamente.
+- **Aislamiento de credenciales DB**: Las credenciales de base de datos viven exclusivamente en el proceso Node de Cypress via `cy.task()`. Nunca entran al browser.
 - **API moderna**: Usa las APIs `Cypress.expose()` y `cy.env()` de Cypress 15.10.0+
 
 ## Requisitos
@@ -43,24 +44,42 @@ yarn add cypress-backend-tool
 import 'cypress-backend-tool'; // Auto-init: registra cy.http() y cy.query()
 ```
 
-Nada más. Sin `init()`, sin configuración adicional.
+Sin `init()`, sin configuración adicional. El plugin se auto-inicializa al importarlo.
 
-### 2. Configurar cypress.config.ts
+### 2. Configurar cypress.config.ts — Expose + Tasks
+
+Las opciones del plugin se configuran via `expose`. Si usás `cy.query()`, necesás registrar los tasks de base de datos en `setupNodeEvents`:
 
 ```typescript
+// cypress.config.ts
 import { defineConfig } from 'cypress';
 
 export default defineConfig({
   e2e: {
     setupNodeEvents(on, config) {
+      on('task', {
+        'db:query': async ({ query, host, port, database, user, password }) => {
+          const { Pool } = require('pg');
+          const pool = new Pool({ host, port, database, user, password });
+          const result = await pool.query(query);
+          await pool.end();
+          return { rows: result.rows, rowCount: result.rowCount };
+        },
+        'db:getConfig': () => ({
+          host: process.env.CYPRESS_DB_HOST || 'localhost',
+          port: parseInt(process.env.CYPRESS_DB_PORT || '5432', 10),
+          database: process.env.CYPRESS_DB_NAME || 'test_db',
+          user: process.env.CYPRESS_DB_USER || 'postgres',
+          password: process.env.CYPRESS_DB_PASSWORD || '',
+        }),
+      });
       return config;
     },
-    // Configuración del plugin vía Cypress.expose()
     expose: {
       snapshotOnly: false, // Colapsa la UI tras cada comando
       hideCredentials: true, // Oculta contraseñas/tokens en la UI
       hideCredentialsOptions: {
-        // Qué secciones sanitizar
+        // Control granular por tab
         headers: true,
         auth: true,
         body: true,
@@ -72,6 +91,8 @@ export default defineConfig({
   },
 });
 ```
+
+> 💡 **Solo HTTP**: si solo usás `cy.http()`, no necesás `setupNodeEvents` — el plugin funciona sin configuración del lado Node.
 
 ### 3. Credenciales de base de datos
 
@@ -191,6 +212,26 @@ export default defineConfig({
 | `hideCredentialsOptions` | `{headers,auth,body,query: boolean}` | Todas `true` | Control granular por sección        |
 | `requestMode`            | `'auto' \| 'manual'`                 | `'auto'`     | Muestra UI automáticamente o no     |
 | `CYPRESS_PLUGIN_DEBUG`   | `boolean`                            | `false`      | Logs de diagnóstico                 |
+
+## Persistencia de UI
+
+A diferencia de otros plugins que re-crean el DOM en cada llamada, `cypress-backend-tool` monta la UI **una sola vez por documento** y cada `cy.http()`/`cy.query()` agrega su propia entrada permanente con un ID único.
+
+Esto significa que:
+
+- Los snapshots de Cypress (`Cypress.log().snapshot()`) son estables entre `it()` blocks. Podés navegar al log de un comando anterior y ver exactamente su request/response, no el del último comando ejecutado.
+- No hay "paneles en blanco" al inspeccionar llamadas previas.
+- El DOM acumula todas las llamadas del test actual — cada una con su propia sección `<section id="cabt-entry-{id}">`.
+
+## Aislamiento de credenciales DB
+
+Las credenciales de base de datos (`dbPassword`, `dbUser`, etc.) **nunca entran al browser**. El flujo es:
+
+1. `cy.query()` llama a `cy.task('db:query')` — el query se ejecuta EN NODE
+2. Solo los resultados (rows) vuelven al browser para mostrarse en la UI
+3. Las credenciales se configuran via `cy.task('db:getConfig')` o `.env`, nunca via `Cypress.expose()`
+
+Esto está verificado por tests de isolación (CA-CMD-01) que comprueban que `dbPassword` no existe en `window` ni en `Cypress.env()`.
 
 ### Runtime overrides
 
