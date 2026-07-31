@@ -103,4 +103,16 @@ describe('App component — reads from stores', () => {
 
     expect(screen.getByText('POST')).toBeInTheDocument();
   });
+
+  it('does NOT render cabt-entry-* id attributes on live sections — those belong to persistent mounts only', () => {
+    apiCalls.push(makeApiCall({ id: 'should-not-have-id' }));
+    const { container } = render(App);
+
+    // The section should exist (live display works)
+    expect(screen.getByText('GET')).toBeInTheDocument();
+    // But it must NOT have the cabt-entry-* id
+    expect(container.querySelector('#cabt-entry-should-not-have-id')).toBeNull();
+    // No element in the rendered tree should have an id starting with cabt-entry
+    expect(container.querySelector('[id^="cabt-entry"]')).toBeNull();
+  });
 });

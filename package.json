@@ -1,6 +1,6 @@
 {
   "name": "cypress-backend-tool",
-  "version": "1.0.7",
+  "version": "1.0.9",
   "author": "Gabriel Ortega <https://github.com/Gabox301>",
   "description": "Cypress plugin for API testing and PostgreSQL queries with UI interface",
   "license": "MIT",
@@ -38,7 +38,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "vite build",
+    "build": "npm run check && npm run lint && npm run unit && vite build",
     "check": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run && cypress run",

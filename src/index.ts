@@ -9,7 +9,7 @@
 import { configure, getConfigOverrides, getPluginConfig, mergeConfig } from '$lib/config';
 import { addApiCall, addDbQuery, clearApiCalls, clearDbQueries, pluginConfig } from '$lib/stores.svelte';
 import type { ApiCall, ApiResponse, CypressApiPluginConfig, DbQuery } from '$lib/types';
-import { ensurePluginMounted } from '$lib/ui';
+import { ensurePluginMounted, mountEntry } from '$lib/ui';
 
 // ============================================
 // Cypress namespace augmentations
@@ -192,6 +192,7 @@ function showApiUi(call: ApiCall): Cypress.Chainable<ApiResponse> {
   applySnapshotOnly(container, config);
 
   return cy.window({ log: false }).then(() => {
+    mountEntry(call);
     const elementId = `cabt-entry-${call.id}`;
     scrollToEntry(doc, elementId);
     const $el = Cypress.$(`#${elementId}`, { log: false });
@@ -220,6 +221,7 @@ function showDbQueryUi(query: DbQuery): void {
   applySnapshotOnly(container, config);
 
   cy.window({ log: false }).then(() => {
+    mountEntry(query);
     const elementId = `cabt-entry-${query.id}`;
     scrollToEntry(doc, elementId);
     const $el = Cypress.$(`#${elementId}`, { log: false });

@@ -1,0 +1,151 @@
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+
+// Mock Svelte's mount/unmount so mountEntry doesn't need a real component tree
+vi.mock('svelte', () => ({
+  mount: vi.fn(() => ({ __tag: 'mocked-component' })),
+  unmount: vi.fn(),
+}));
+
+import type { ApiCall, DbQuery } from '$lib/types';
+import { mount } from 'svelte';
+import { EntryRegistry } from './entry-registry';
+import { mountEntry } from './index';
+
+// ---------------------------------------------------------------------------
+// Fixtures
+// ---------------------------------------------------------------------------
+
+function apiCall(overrides: Partial<ApiCall> = {}): ApiCall {
+  return {
+    id: crypto.randomUUID(),
+    request: { url: 'https://example.com/api', method: 'GET' },
+    response: { status: 200, statusText: 'OK', headers: {}, body: { ok: true }, duration: 10, size: 50 },
+    timestamp: Date.now(),
+    ...overrides,
+  } as ApiCall;
+}
+
+function dbQuery(overrides: Partial<DbQuery> = {}): DbQuery {
+  return {
+    id: crypto.randomUUID(),
+    connectionId: 'local:5432/test',
+    query: 'SELECT 1',
+    result: [{ one: 1 }],
+    duration: 5,
+    timestamp: Date.now(),
+    ...overrides,
+  } as DbQuery;
+}
+
+// ---------------------------------------------------------------------------
+// Setup
+// ---------------------------------------------------------------------------
+
+beforeEach(() => {
+  document.body.innerHTML = '';
+  // Create the container mountEntry expects to find
+  const container = document.createElement('div');
+  container.id = 'cypress-api-plugin-container';
+  document.body.appendChild(container);
+
+  EntryRegistry.clear();
+  vi.clearAllMocks();
+});
+
+// ===========================================================================
+// mountEntry — ApiCall
+// ===========================================================================
+describe('mountEntry — ApiCall', () => {
+  it('creates a div#cabt-entry-{id} in the container', () => {
+    const call = apiCall({ id: 'abc-123' });
+
+    const div = mountEntry(call);
+
+    expect(div).toBeInstanceOf(HTMLElement);
+    expect(div.id).toBe('cabt-entry-abc-123');
+    expect(div.parentElement).toBe(document.getElementById('cypress-api-plugin-container'));
+    expect(document.getElementById('cabt-entry-abc-123')).toBe(div);
+  });
+
+  it('registers the entry in EntryRegistry', () => {
+    const call = apiCall({ id: 'reg-test' });
+
+    mountEntry(call);
+
+    const record = EntryRegistry.get('reg-test');
+    expect(record).toBeDefined();
+    expect(record!.element).toBe(document.getElementById('cabt-entry-reg-test'));
+  });
+
+  it('calls Svelte mount with EntryPanel and correct props', () => {
+    const call = apiCall({ id: 'props-test' });
+
+    mountEntry(call);
+
+    expect(mount).toHaveBeenCalledTimes(1);
+    const mountCall = (mount as Mock).mock.calls[0];
+    // First arg: Component (EntryPanel)
+    // Second arg: options with target and props
+    expect(mountCall[1]).toHaveProperty('target');
+    expect(mountCall[1].target.id).toBe('cabt-entry-props-test');
+    expect(mountCall[1]).toHaveProperty('props');
+    expect(mountCall[1].props.data).toBe(call);
+  });
+
+  it('returns the created div element', () => {
+    const call = apiCall({ id: 'return-div' });
+
+    const div = mountEntry(call);
+
+    expect(div).toBeInstanceOf(HTMLElement);
+    expect(div.id).toBe('cabt-entry-return-div');
+  });
+});
+
+// ===========================================================================
+// mountEntry — DbQuery
+// ===========================================================================
+describe('mountEntry — DbQuery', () => {
+  it('creates a div#cabt-entry-{id} for DB queries', () => {
+    const q = dbQuery({ id: 'db-001' });
+
+    const div = mountEntry(q);
+
+    expect(div.id).toBe('cabt-entry-db-001');
+    expect(document.getElementById('cabt-entry-db-001')).toBe(div);
+  });
+
+  it('registers DB entries in EntryRegistry', () => {
+    const q = dbQuery({ id: 'db-reg' });
+
+    mountEntry(q);
+
+    expect(EntryRegistry.get('db-reg')).toBeDefined();
+  });
+
+  it('passes the DbQuery as data prop', () => {
+    const q = dbQuery({ id: 'db-props' });
+
+    mountEntry(q);
+
+    const mountCall = (mount as Mock).mock.calls[0];
+    expect(mountCall[1].props.data).toBe(q);
+  });
+});
+
+// ===========================================================================
+// mountEntry — Multiple calls
+// ===========================================================================
+describe('mountEntry — multiple calls', () => {
+  it('creates sibling divs for sequential calls', () => {
+    const call1 = apiCall({ id: 'first' });
+    const call2 = apiCall({ id: 'second' });
+
+    const div1 = mountEntry(call1);
+    const div2 = mountEntry(call2);
+
+    expect(div1.nextElementSibling).toBe(div2);
+    expect(document.querySelectorAll('#cypress-api-plugin-container > div')).toHaveLength(2);
+    expect(EntryRegistry.size()).toBe(2);
+  });
+});

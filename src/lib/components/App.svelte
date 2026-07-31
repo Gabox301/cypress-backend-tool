@@ -47,7 +47,7 @@
 
 <div class="scroll-area">
   {#each entries as entry (entry.id)}
-    <section id={`cabt-entry-${entry.id}`} class="entry">
+    <section class="entry">
       {#if entry.kind === 'db'}
         <QueryPanel
           query={entry.query.query}

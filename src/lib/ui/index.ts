@@ -1,5 +1,9 @@
+import { pluginConfig } from '$lib/stores.svelte';
+import type { ApiCall, DbQuery } from '$lib/types';
 import { mount, unmount } from 'svelte';
 import App from '../components/App.svelte';
+import EntryPanel from '../components/EntryPanel.svelte';
+import { EntryRegistry } from './entry-registry';
 
 // ──────────────────────────────────────────────────────────────────────────
 // The plugin UI is mounted ONCE per live AUT document and stays mounted.
@@ -67,4 +71,45 @@ export function teardownPluginUI(): void {
     mountedInstance = null;
     mountedDocument = null;
   }
+}
+
+/**
+ * Mount a standalone EntryPanel into a persistent div#cabt-entry-{id} inside
+ * the plugin container. The entry is registered in EntryRegistry and its DOM
+ * survives store clearing between Cypress it() blocks.
+ *
+ * Config values (hideCredentials, snapshotOnly, etc.) are captured at mount
+ * time as component props — they are NOT reactive. This matches the design
+ * decision: "Config captured at mount time, not reactive."
+ *
+ * @returns The created div#cabt-entry-{id} element.
+ */
+export function mountEntry(data: ApiCall | DbQuery): HTMLElement {
+  const id = data.id;
+  const container = document.getElementById('cypress-api-plugin-container');
+  if (!container) {
+    throw new Error('mountEntry: plugin container not found — call getOrCreateContainer first');
+  }
+
+  // Create the persistent element — this is what Cypress.log().snapshot()
+  // targets. It is a sibling of App.svelte's root, NOT inside its {#each}.
+  const div = document.createElement('div');
+  div.id = `cabt-entry-${id}`;
+  container.appendChild(div);
+
+  // Mount the entry component with props frozen at call time.
+  const component = mount(EntryPanel, {
+    target: div,
+    props: {
+      data,
+      hideCredentials: pluginConfig.hideCredentials,
+      hideCredentialsOptions: pluginConfig.hideCredentialsOptions,
+      snapshotOnly: pluginConfig.snapshotOnly,
+    },
+  });
+
+  // Track the entry so it can be unmounted later if needed.
+  EntryRegistry.register(id, component, div);
+
+  return div;
 }
