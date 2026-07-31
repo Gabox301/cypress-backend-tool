@@ -48,6 +48,16 @@ beforeEach(() => {
   container.id = 'cypress-api-plugin-container';
   document.body.appendChild(container);
 
+  // Create the scroll-area inside the container (App.svelte would normally
+  // provide this when mounted, but these tests bypass Svelte rendering)
+  const scrollArea = document.createElement('div');
+  scrollArea.id = 'cabt-scroll-area';
+  scrollArea.className = 'scroll-area';
+  const anchor = document.createElement('div');
+  anchor.className = 'bottom-anchor';
+  scrollArea.appendChild(anchor);
+  container.appendChild(scrollArea);
+
   EntryRegistry.clear();
   vi.clearAllMocks();
 });
@@ -63,7 +73,7 @@ describe('mountEntry — ApiCall', () => {
 
     expect(div).toBeInstanceOf(HTMLElement);
     expect(div.id).toBe('cabt-entry-abc-123');
-    expect(div.parentElement).toBe(document.getElementById('cypress-api-plugin-container'));
+    expect(div.parentElement).toBe(document.getElementById('cabt-scroll-area'));
     expect(document.getElementById('cabt-entry-abc-123')).toBe(div);
   });
 
@@ -145,7 +155,7 @@ describe('mountEntry — multiple calls', () => {
     const div2 = mountEntry(call2);
 
     expect(div1.nextElementSibling).toBe(div2);
-    expect(document.querySelectorAll('#cypress-api-plugin-container > div')).toHaveLength(2);
+    expect(document.querySelectorAll('#cabt-scroll-area > div:not(.bottom-anchor)')).toHaveLength(2);
     expect(EntryRegistry.size()).toBe(2);
   });
 });

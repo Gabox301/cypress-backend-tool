@@ -52,6 +52,15 @@ beforeEach(() => {
   container.id = 'cypress-api-plugin-container';
   document.body.appendChild(container);
 
+  // App.svelte normally provides the scroll-area — tests simulate it
+  const scrollArea = document.createElement('div');
+  scrollArea.id = 'cabt-scroll-area';
+  scrollArea.className = 'scroll-area';
+  const anchor = document.createElement('div');
+  anchor.className = 'bottom-anchor';
+  scrollArea.appendChild(anchor);
+  container.appendChild(scrollArea);
+
   apiCalls.length = 0;
   dbQueries.length = 0;
   EntryRegistry.clear();

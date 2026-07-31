@@ -10,6 +10,7 @@ import { configure, getConfigOverrides, getPluginConfig, mergeConfig } from '$li
 import { addApiCall, addDbQuery, clearApiCalls, clearDbQueries, pluginConfig } from '$lib/stores.svelte';
 import type { ApiCall, ApiResponse, CypressApiPluginConfig, DbQuery } from '$lib/types';
 import { ensurePluginMounted, mountEntry } from '$lib/ui';
+import { EntryRegistry } from '$lib/ui/entry-registry';
 
 // ============================================
 // Cypress namespace augmentations
@@ -192,7 +193,7 @@ function showApiUi(call: ApiCall): Cypress.Chainable<ApiResponse> {
   applySnapshotOnly(container, config);
 
   return cy.window({ log: false }).then(() => {
-    mountEntry(call);
+    mountEntry(call, doc);
     const elementId = `cabt-entry-${call.id}`;
     scrollToEntry(doc, elementId);
     const $el = Cypress.$(`#${elementId}`, { log: false });
@@ -221,7 +222,7 @@ function showDbQueryUi(query: DbQuery): void {
   applySnapshotOnly(container, config);
 
   cy.window({ log: false }).then(() => {
-    mountEntry(query);
+    mountEntry(query, doc);
     const elementId = `cabt-entry-${query.id}`;
     scrollToEntry(doc, elementId);
     const $el = Cypress.$(`#${elementId}`, { log: false });
@@ -320,8 +321,10 @@ Cypress.Commands.add('query', (query: string, connectionOptions?: DbConnectionOp
 beforeEach(() => {
   // Clear accumulated data from previous test — Cypress does NOT reload
   // the AUT page between tests (default testIsolation), so module-level
-  // stores persist across tests. Without this, every test inherits all
-  // cy.http()/cy.query() calls from every previous test in the spec.
+  // stores and mounted entries persist across tests. Without clearing,
+  // every test inherits all cy.http()/cy.query() entries from every
+  // previous test in the spec.
+  EntryRegistry.clear();
   clearApiCalls();
   clearDbQueries();
 

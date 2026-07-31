@@ -84,18 +84,28 @@ export function teardownPluginUI(): void {
  *
  * @returns The created div#cabt-entry-{id} element.
  */
-export function mountEntry(data: ApiCall | DbQuery): HTMLElement {
+export function mountEntry(data: ApiCall | DbQuery, doc: Document = document): HTMLElement {
   const id = data.id;
-  const container = document.getElementById('cypress-api-plugin-container');
+  const container = doc.getElementById('cypress-api-plugin-container');
   if (!container) {
     throw new Error('mountEntry: plugin container not found — call getOrCreateContainer first');
   }
 
-  // Create the persistent element — this is what Cypress.log().snapshot()
-  // targets. It is a sibling of App.svelte's root, NOT inside its {#each}.
+  // Mount entries inside the scroll-area so they scroll naturally
+  const scrollArea = container.querySelector('#cabt-scroll-area');
+  if (!scrollArea) {
+    throw new Error('mountEntry: scroll-area not found — App may not be mounted');
+  }
+
   const div = document.createElement('div');
   div.id = `cabt-entry-${id}`;
-  container.appendChild(div);
+  // Insert before the bottom-anchor so new entries appear at the end
+  const anchor = scrollArea.querySelector('.bottom-anchor');
+  if (anchor) {
+    scrollArea.insertBefore(div, anchor);
+  } else {
+    scrollArea.appendChild(div);
+  }
 
   // Mount the entry component with props frozen at call time.
   const component = mount(EntryPanel, {
